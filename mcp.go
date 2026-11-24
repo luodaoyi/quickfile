@@ -35,8 +35,15 @@ type mcpUploadInput struct {
 	SpaceID   string `json:"spaceId"`
 	FileIndex int    `json:"fileIndex" jsonschema:"Zero-based file index."`
 	Owner     string `json:"owner" jsonschema:"Upload credential returned by create_space. Keep private."`
-	Offset    int64  `json:"offset" jsonschema:"Confirmed uploaded byte count; start at 0."`
+	Offset    int64  `json:"offset" jsonschema:"Byte offset. In serial mode use the confirmed uploaded count; parallel mode also accepts uncommitted non-overlapping ranges."`
+	Parallel  bool   `json:"parallel,omitempty" jsonschema:"Enable out-of-order parallel upload. Inspect uploaded and ranges with get_space when resuming."`
 	Data      string `json:"dataBase64" jsonschema:"Standard Base64 of one nonempty chunk, at most 4194304 decoded bytes."`
+}
+type mcpTorrentInput struct {
+	SpaceID    string   `json:"spaceId"`
+	FileIndex  int      `json:"fileIndex"`
+	Credential string   `json:"credential" jsonschema:"owner for publishing; owner or an active claim for reading."`
+	Hashes     []string `json:"hashes,omitempty" jsonschema:"SHA-1 hex hashes of each 4 MiB piece in file order. Required for publish_torrent."`
 }
 type mcpClaimInput struct {
 	SpaceID string `json:"spaceId"`
@@ -158,10 +165,11 @@ func mcpUpload(ctx context.Context, input mcpUploadInput) (any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid dataBase64: %w", err)
 	}
-	resp, err := mcpHTTP(ctx, "PATCH", path+"/files/"+strconv.Itoa(input.FileIndex), data, http.Header{
-		"Authorization": {"Bearer " + input.Owner},
-		"Upload-Offset": {strconv.FormatInt(input.Offset, 10)},
-	})
+	headers := http.Header{"Authorization": {"Bearer " + input.Owner}, "Upload-Offset": {strconv.FormatInt(input.Offset, 10)}}
+	if input.Parallel {
+		headers.Set("Upload-Mode", "parallel")
+	}
+	resp, err := mcpHTTP(ctx, "PATCH", path+"/files/"+strconv.Itoa(input.FileIndex), data, headers)
 	if err != nil {
 		return nil, err
 	}
@@ -193,7 +201,7 @@ func (a *application) mcpHandler() http.Handler {
 		}
 		return mcpJSON(ctx, "GET", path, nil, "")
 	})
-	mcpAddTool(server, "upload_chunk", "PATCH /api/spaces/{id}/files/{index}: append one Base64 chunk using owner and the exact confirmed offset. Max 4 MiB decoded. On HTTP 409 inspect get_space and resume; do not recreate the share.", false, mcpUpload)
+	mcpAddTool(server, "upload_chunk", "PATCH a Base64 chunk, at most 4 MiB decoded. Default mode appends at the confirmed offset. With parallel:true, non-overlapping out-of-order ranges may be uploaded concurrently. Inspect get_space uploaded/ranges after HTTP 409 or a lost response; never recreate the share.", false, mcpUpload)
 	mcpAddTool(server, "share_file", "Create and upload one text or small Base64 file in one call; returns the share link and private owner credential. Supply exactly one content field. Use create_space/upload_chunk for larger files.", false, func(ctx context.Context, in mcpShareInput) (any, error) {
 		if (in.Text == nil) == (in.Data == nil) {
 			return nil, fmt.Errorf("supply exactly one of text and dataBase64")
@@ -310,7 +318,30 @@ func (a *application) mcpHandler() http.Handler {
 			return nil, err
 		}
 		base := ctx.Value(mcpRequestKey{}).(mcpRequestInfo).public
-		return map[string]any{"urlTemplate": "ws" + strings.TrimPrefix(base, "http") + path + "/ws?role={sender|receiver}&token={owner|claim}", "messages": "Server: peer notification. Relay: {type: offer|answer|ice, peer: destination peer id, data: SDP or ICE payload}. See peer.js for the file data-channel protocol.", "clientSource": base + "/peer.js"}, nil
+		return map[string]any{"urlTemplate": "ws" + strings.TrimPrefix(base, "http") + path + "/ws?role={sender|receiver}&token={owner|claim}", "messages": "Server: peer notification. Relay: {type: offer|answer|ice, peer: destination peer id, data: {fileIndex: zero-based file index, signal: SimplePeer signal object}}. Each private torrent uses a WebTorrent BitTorrent wire over WebRTC. See peer.js.", "clientSource": base + "/peer.js"}, nil
+	})
+	mcpAddTool(server, "publish_torrent", "POST file torrent metadata: publish immutable SHA-1 piece hashes with the upload credential to enable WebTorrent P2P before upload completes. The server builds an isolated private torrent descriptor without public trackers.", false, func(ctx context.Context, in mcpTorrentInput) (any, error) {
+		path, err := mcpSpacePath(in.SpaceID)
+		if err != nil {
+			return nil, err
+		}
+		return mcpJSON(ctx, "POST", path+"/files/"+strconv.Itoa(in.FileIndex)+"/torrent", map[string]any{"hashes": in.Hashes}, in.Credential)
+	})
+	mcpAddTool(server, "get_torrent", "GET a private WebTorrent descriptor as Base64. Requires owner or an active claim. On complete stored files the descriptor is generated automatically; on unfinished files the sender must publish hashes first.", true, func(ctx context.Context, in mcpTorrentInput) (any, error) {
+		path, err := mcpSpacePath(in.SpaceID)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := mcpHTTP(ctx, "GET", path+"/files/"+strconv.Itoa(in.FileIndex)+"/torrent", nil, http.Header{"Authorization": {"Bearer " + in.Credential}})
+		if err != nil {
+			return nil, err
+		}
+		defer resp.Body.Close()
+		data, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"dataBase64": base64.StdEncoding.EncodeToString(data), "mimeType": "application/x-bittorrent", "pieceLength": chunkSize}, nil
 	})
 	server.AddResource(&mcp.Resource{URI: "quickfile://mcp/index", Name: "Quickfile MCP setup and API guide", MIMEType: "text/plain"}, func(ctx context.Context, _ *mcp.ReadResourceRequest) (*mcp.ReadResourceResult, error) {
 		text, err := mcpGuide(ctx.Value(mcpRequestKey{}).(mcpRequestInfo).public)

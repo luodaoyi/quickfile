@@ -30,6 +30,8 @@ func (a *application) routes() http.Handler {
 	mux.HandleFunc("POST /api/spaces", a.createSpace)
 	mux.HandleFunc("GET /api/spaces/{id}", a.getSpace)
 	mux.HandleFunc("PATCH /api/spaces/{id}/files/{file}", a.upload)
+	mux.HandleFunc("GET /api/spaces/{id}/files/{file}/torrent", a.torrent)
+	mux.HandleFunc("POST /api/spaces/{id}/files/{file}/torrent", a.torrent)
 	mux.HandleFunc("POST /api/spaces/{id}/claims", a.claimSpace)
 	mux.HandleFunc("POST /api/spaces/{id}/heartbeat", a.heartbeat)
 	mux.HandleFunc("POST /api/spaces/{id}/complete", a.complete)
@@ -188,6 +190,10 @@ func fileIndex(r *http.Request, sp *space) (int, bool) {
 }
 
 func (a *application) upload(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Upload-Mode") == "parallel" {
+		a.uploadParallel(w, r)
+		return
+	}
 	sp := a.find(w, r)
 	if sp == nil {
 		return
@@ -218,6 +224,11 @@ func (a *application) upload(w http.ResponseWriter, r *http.Request) {
 	if !sp.live() {
 		sp.mu.Unlock()
 		writeError(w, 410, errGone.Error())
+		return
+	}
+	if sp.fileInflight(i) || len(sp.meta.Files[i].Ranges) > 0 {
+		sp.mu.Unlock()
+		writeError(w, 409, "file has parallel ranges; use Upload-Mode: parallel")
 		return
 	}
 	uploaded, size := sp.meta.Files[i].Uploaded, sp.meta.Files[i].Size
@@ -391,7 +402,7 @@ func (sp *space) readFile(r *http.Request, dst io.Writer, index int, start, end 
 			sp.mu.Unlock()
 			return errGone
 		}
-		available := min(sp.meta.Files[index].Uploaded, end)
+		available := min(sp.meta.Files[index].availableEnd(start), end)
 		changed := sp.changed
 		expires := time.Until(sp.meta.Expires)
 		sp.mu.Unlock()

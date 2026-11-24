@@ -101,6 +101,27 @@ returned by create_space. PATCH each raw chunk with these headers:
 Authorization: Bearer <owner>
 Upload-Offset: <confirmed byte offset>
 Send at most 4194304 raw bytes per request, not multipart/form-data.
+For parallel requests add Upload-Mode: parallel, or use upload_chunk with parallel:true.
+The browser starts at one request and adapts up to five using piece duration.
+Different files share this scheduling window. The server accepts disjoint ranges.
+get_space returns uploaded (the contiguous committed prefix) and ranges (committed
+intervals after that prefix). A range is [start,end), with an exclusive end.
+Never resend a committed range; inspect state after a lost response. An overlap
+returns HTTP 409. Missing ranges remain unavailable until they are committed.
+Legacy serial uploads remain supported for spaces without out-of-order ranges.
+
+WebTorrent downloads and P2P
+---------------------------
+The browser uses WebTorrent for piece scheduling, SHA-1 verification, WebRTC
+peers and the authenticated HTTP web seed. The HTTP seed advertises only pieces
+actually committed on the server. It never reserves missing pieces away from P2P.
+Each file has an isolated private torrent; public trackers, DHT and LSD are off.
+publish_torrent accepts owner plus hashes: SHA-1 hex strings of consecutive 4 MiB
+pieces. It can publish metadata before any file bytes reach the server.
+get_torrent returns the bencoded descriptor as Base64 using owner or a claim.
+On complete stored files, the server generates the descriptor automatically.
+Browser ZIP downloads consume WebTorrent streams and support ZIP64; the REST
+archive endpoint remains available to HTTP/MCP clients.
 
 Receive and save
 ----------------
@@ -132,6 +153,8 @@ POST /api/spaces/{id}/complete            -> complete_download
 GET  /api/spaces/{id}/files/{index}       -> download_file (URL or Base64 range)
 GET  /api/spaces/{id}/archive             -> download_archive (streaming URL)
 GET  /api/spaces/{id}/ws                  -> get_signaling_info (connection info)
+POST /api/spaces/{id}/files/{index}/torrent -> publish_torrent
+GET  /api/spaces/{id}/files/{index}/torrent -> get_torrent
 Convenience workflow                      -> share_file
 
 get_signaling_info returns a WebSocket URL template and signaling instructions.

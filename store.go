@@ -28,9 +28,10 @@ var validID = regexp.MustCompile(`^[a-f0-9]{48}$`)
 var errGone = errors.New("space expired or deleted")
 
 type fileMeta struct {
-	Name     string `json:"name"`
-	Size     int64  `json:"size"`
-	Uploaded int64  `json:"uploaded"`
+	Name     string      `json:"name"`
+	Size     int64       `json:"size"`
+	Uploaded int64       `json:"uploaded"`
+	Ranges   []byteRange `json:"ranges,omitempty"`
 }
 
 type claim struct {
@@ -50,15 +51,16 @@ type metadata struct {
 }
 
 type space struct {
-	mu      sync.Mutex
-	meta    metadata
-	dir     string
-	changed chan struct{}
-	done    chan struct{}
-	deleted bool
-	active  int
-	peers   map[string]*peer
-	uploads []sync.Mutex
+	mu       sync.Mutex
+	meta     metadata
+	dir      string
+	changed  chan struct{}
+	done     chan struct{}
+	deleted  bool
+	active   int
+	peers    map[string]*peer
+	uploads  []sync.Mutex
+	inflight map[string]byteRange
 }
 
 type fileStore struct {
@@ -113,13 +115,17 @@ func openStore(root string) (*fileStore, error) {
 			if f.Size < 0 || f.Size > maxFileSize || f.Uploaded < 0 || f.Uploaded > f.Size {
 				return nil, fmt.Errorf("invalid file metadata in %s", dir)
 			}
+			committed, err := f.committedEnd()
+			if err != nil {
+				return nil, fmt.Errorf("invalid file ranges in %s: %w", dir, err)
+			}
 			path := filepath.Join(dir, strconv.Itoa(i)+".data")
 			info, err := os.Lstat(path)
-			if err != nil || !info.Mode().IsRegular() || info.Size() < f.Uploaded {
+			if err != nil || !info.Mode().IsRegular() || info.Size() < committed {
 				return nil, fmt.Errorf("missing or truncated committed file %s", path)
 			}
-			if info.Size() != f.Uploaded {
-				if err := os.Truncate(path, f.Uploaded); err != nil {
+			if info.Size() != committed {
+				if err := os.Truncate(path, committed); err != nil {
 					return nil, err
 				}
 			}
@@ -140,7 +146,7 @@ func openStore(root string) (*fileStore, error) {
 }
 
 func newSpace(m metadata, dir string) *space {
-	return &space{meta: m, dir: dir, changed: make(chan struct{}), done: make(chan struct{}), peers: make(map[string]*peer), uploads: make([]sync.Mutex, len(m.Files))}
+	return &space{meta: m, dir: dir, changed: make(chan struct{}), done: make(chan struct{}), peers: make(map[string]*peer), inflight: make(map[string]byteRange), uploads: make([]sync.Mutex, len(m.Files))}
 }
 
 func (s *space) save() error {
