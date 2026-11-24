@@ -30,9 +30,9 @@ No installation or account is required. Open the website, choose your files, and
 | Streaming downloads | Receive committed data while the sender continues uploading |
 | Automatic P2P | Try WebRTC when the sender is online, then use HTTPS storage when a direct connection is unavailable |
 | Download later | Once uploads finish, the sender can close the page |
-| Chunking and resume | 4 MiB upload chunks, resumable uploads, HTTP Range requests, and download resume |
-| Parallel downloads | Four concurrent chunks for individual files in browsers with file-writing support |
-| Multiple files | Server-generated streaming ZIP downloads, including ZIP64 |
+| Chunking and resume | 4 MiB chunks across single and multiple files, adaptive concurrency from 1 to 5 based on chunk duration, and missing-range resume after restart |
+| WebTorrent downloads | WebTorrent piece scheduling and SHA-1 verification over WebRTC P2P and authenticated HTTP web seeds |
+| Multiple files | Browser-generated streaming ZIP64 from WebTorrent streams; HTTP/MCP server ZIP downloads remain available |
 | Automatic cleanup | Expire after 24 hours or 100 pickups by default, whichever comes first |
 | Simple interface | Animated galaxy, translucent panels, English/Chinese switching, and browser-local share history |
 | One executable | Frontend assets are embedded in Go, with no database or Node.js runtime required |
@@ -150,15 +150,15 @@ Share settings offer the following choices.
 
 ## Transfers and privacy
 
-Individual files automatically use WebRTC or HTTPS. P2P discovery uses a public STUN service and does not require a self-hosted TURN server. The sender also uploads files to the server so recipients can collect them later. Multi-file ZIP downloads are generated and transferred by the server.
+The browser uses WebTorrent to schedule and SHA-1 verify 4 MiB pieces. WebRTC P2P and authenticated HTTP web seeds share that scheduler; HTTP sources advertise only committed pieces. Each file uses an isolated private torrent with public trackers, DHT and LSD disabled. P2P discovery uses a public STUN server; HTTP sources provide data when direct connections are unavailable. Senders upload concurrently for later collection. Browser ZIP downloads consume these file streams; HTTP/MCP server ZIP downloads remain available.
 
 WebRTC uses DTLS, and public access uses HTTPS. **Stored files are written to the server disk as plaintext. This version does not implement client-side end-to-end encryption.** Share links only with the intended recipients.
 
-Browsers with File System Access support can save four chunks in parallel. Other browsers use their native download manager. File-saving and resume behavior depend on browser support.
+Browsers with File System Access stream directly to disk; other browsers with Service Worker support use their native download manager. Received pieces are temporarily stored in IndexedDB and removed at the end of the transfer, so sufficient site storage quota is required. Restarting a browser download schedules its pieces again; HTTP clients can still resume with Range requests.
 
 ## Building and releases
 
-Building from source requires Go 1.26 or later.
+Building from source requires Go 1.26 or later. The WebTorrent browser bundle is committed, so Go builds do not require Node.js. To change browser dependencies, use Node.js 22 or later to run `npm ci --ignore-scripts --no-audit --no-fund` and `npm run build:webtorrent`. CI rebuilds the bundle and checks for differences.
 
 ```sh
 go build -trimpath -o quickfile .
@@ -181,7 +181,7 @@ url = "https://file.011f.com/mcp"
 
 Call `share_file({"name":"hello.txt","text":"Hello!"})` for a share link. Use `create_space` and `upload_chunk` for multiple or large files. Read client-local files using the agent's own filesystem tools and send Base64 chunks, or upload raw chunks to the returned HTTP URL. The remote MCP service cannot read a path on the client's computer.
 
-The 11 tools cover all REST APIs and provide WebSocket signaling connection information. File downloads return an HTTP URL or a Base64 byte range; ZIP downloads stream over HTTP. Per-space owner and claim credentials are returned by the tools and keep their existing validation. Reuse one claim for all files and ranges, send heartbeats while receiving, and call `complete_download` after saving.
+The 13 tools cover all REST APIs and provide WebSocket signaling connection information. `upload_chunk` accepts `parallel:true`; `publish_torrent` and `get_torrent` publish and retrieve piece metadata. File downloads return an HTTP URL or a Base64 byte range; ZIP downloads stream over HTTP. Per-space owner and claim credentials are returned by the tools and keep their existing validation. Reuse one claim for all files and ranges, send heartbeats while receiving, and call `complete_download` after saving.
 
 See the [MCP index template](web/mcp.txt) for Codex, DeepSeek Harness, Claude Code and Cursor setup and the full tool mapping. The running guide uses the current site's address and is also exposed as the `quickfile://mcp/index` MCP resource. Client-side tool approval settings remain controlled by the client.
 
@@ -190,8 +190,10 @@ See the [MCP index template](web/mcp.txt) for Codex, DeepSeek Harness, Claude Co
 | Request | Purpose |
 | --- | --- |
 | `POST /api/spaces` | Submit `{files:[{name,size}],hours,maxDownloads}` and immediately receive a space and upload credential |
-| `GET /api/spaces/{id}` | Read the file list and committed upload offsets |
-| `PATCH /api/spaces/{id}/files/{index}` | Append a chunk using the upload credential and `Upload-Offset` |
+| `GET /api/spaces/{id}` | Read file metadata, contiguous committed offsets and out-of-order ranges |
+| `PATCH /api/spaces/{id}/files/{index}` | Append with the upload credential and `Upload-Offset`; `Upload-Mode: parallel` accepts disjoint out-of-order ranges |
+| `POST /api/spaces/{id}/files/{index}/torrent` | Publish immutable SHA-1 piece hashes using the upload credential |
+| `GET /api/spaces/{id}/files/{index}/torrent` | Retrieve the private torrent with an upload or pickup credential |
 | `POST /api/spaces/{id}/claims` | Reserve a pickup using a random 48-character hexadecimal `{token}`; retries with the same token are idempotent |
 | `POST /api/spaces/{id}/heartbeat` | Keep a pickup active |
 | `GET /api/spaces/{id}/files/{index}` | Download a file or a byte range, waiting for data that has not arrived yet |
@@ -203,6 +205,6 @@ Upload and pickup credentials normally use `Authorization: Bearer <token>`. Nati
 
 ## License and credits
 
-Project code and original documentation are available under the [MIT License](LICENSE).
+Project code and original documentation are available under the [MIT License](LICENSE). WebTorrent and browser dependencies are pinned in `package-lock.json`; their [third-party notices](web/WEBTORRENT-LICENSES.txt) are retained.
 
 The interface is inspired by [Wormhole](https://wormhole.app/). The galaxy texture and mark come from its public website and remain the property of their respective owners; the project's MIT grant does not cover these third-party assets. The background uses Three.js r135, with its [MIT license](web/THREE-LICENSE.txt) retained. The galaxy renderer is ported from Wormhole's public frontend and uses the same GSAP 3.10.4 and RoughEase. GreenSock copyright and license notices are retained in the scripts; these third-party components are not covered by this project's MIT grant. QR codes use [Project Nayuki's QR Code generator](https://www.nayuki.io/page/qr-code-generator-library), with the MIT license retained in its source.

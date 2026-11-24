@@ -1,5 +1,13 @@
 import { startGalaxy } from "./background.js";
-import { PeerLink } from "./peer.js";
+import { TorrentTransfer } from "./peer.js";
+import {
+  adaptiveUpload,
+  uploadTasks,
+  confirmRange,
+  receivedBytes,
+} from "./upload.js";
+import { saveStream } from "./save.js";
+import { downloadZip } from "./webtorrent.js";
 
 const $ = (id) => document.getElementById(id);
 const dictionaries = {
@@ -26,6 +34,7 @@ const dictionaries = {
     copy: "复制链接",
     copied: "已复制",
     uploading: "正在上传",
+    preparing: "正在准备 WebTorrent 分片",
     ready: "上传完成，可以关闭页面",
     paused: "上传暂停，点击继续上传",
     resume: "继续上传",
@@ -74,6 +83,7 @@ const dictionaries = {
     copy: "Copy link",
     copied: "Copied",
     uploading: "Uploading",
+    preparing: "Preparing WebTorrent pieces",
     ready: "Uploaded. You can close this page.",
     paused: "Upload paused. Continue when ready.",
     resume: "Resume upload",
@@ -309,7 +319,9 @@ function renderShare() {
     : complete
       ? t("ready")
       : running
-        ? `${t("uploading")} ${Math.floor((uploaded / total) * 100)}%`
+        ? senders.get(record.id)?.preparing
+          ? t("preparing")
+          : `${t("uploading")} ${Math.floor((uploaded / total) * 100)}%`
         : t("paused");
   $("upload-progress").value = total ? uploaded / total : 1;
   $("upload-help").textContent = expired
@@ -452,7 +464,9 @@ function renderHistory() {
     const status =
       !expired && uploaded < total
         ? active?.running
-          ? `${t("uploading")} ${Math.floor((uploaded / total) * 100)}%`
+          ? senders.get(record.id)?.preparing
+            ? t("preparing")
+            : `${t("uploading")} ${Math.floor((uploaded / total) * 100)}%`
           : t("paused")
         : "";
     card.append(element("div", "space-status", status));
@@ -623,9 +637,9 @@ async function chooseFiles(files) {
 
 function uploadBytes(record) {
   const pending = senders.get(record.id)?.pending;
-  return record.files.reduce(
-    (sum, f, index) => sum + f.uploaded + (pending?.get(index) || 0),
-    0,
+  return (
+    record.files.reduce((sum, file) => sum + receivedBytes(file), 0) +
+    [...(pending?.values() || [])].reduce((sum, bytes) => sum + bytes, 0)
   );
 }
 function updateUploadProgress(record) {
@@ -653,72 +667,73 @@ async function uploadSpace(record, files) {
   try {
     const fresh = await api(`/api/spaces/${record.id}`);
     Object.assign(record, fresh);
-    if (!sender.signal)
-      sender.signal = new PeerLink(
+    sender.preparing = true;
+    renderHistory();
+    if (!sender.signal) {
+      sender.signal = new TorrentTransfer(
         record.id,
         "sender",
         record.owner,
         record.expires,
         files,
+        () => {},
+        (err) => message(err.message, true),
       );
-    let nextFile = 0;
-    async function worker() {
-      while (nextFile < files.length) {
-        const index = nextFile++,
-          file = files[index];
-        while (record.files[index].uploaded < file.size) {
-          const offset = record.files[index].uploaded;
-          const part = file.slice(
-            offset,
-            Math.min(offset + 4 * 1024 ** 2, file.size),
-          );
-          const data = await new Promise((resolve, reject) => {
+      await sender.signal.prepare();
+    }
+    sender.preparing = false;
+    renderHistory();
+    const abort = new AbortController();
+    await adaptiveUpload(
+      uploadTasks(record.files),
+      async ({ index, offset, end }) => {
+        const key = index + ":" + offset;
+        try {
+          await new Promise((resolve, reject) => {
             const request = new XMLHttpRequest();
             request.open("PATCH", `/api/spaces/${record.id}/files/${index}`);
             request.setRequestHeader("Authorization", `Bearer ${record.owner}`);
             request.setRequestHeader("Upload-Offset", String(offset));
+            request.setRequestHeader("Upload-Mode", "parallel");
             request.responseType = "json";
             request.upload.onprogress = (event) => {
-              sender.pending.set(index, event.loaded);
+              sender.pending.set(key, event.loaded);
               updateUploadProgress(record);
             };
-            request.onerror = () => {
-              sender.pending.delete(index);
-              reject(new Error(t("paused")));
-            };
+            request.onerror = () => reject(new Error(t("paused")));
             request.onload = () => {
-              sender.pending.delete(index);
-              if (
-                (request.status >= 200 && request.status < 300) ||
-                request.status === 409
-              )
-                resolve(request.response);
+              if (request.status >= 200 && request.status < 300) resolve();
               else {
-                const err = new Error(
+                const error = new Error(
                   request.response?.error || `HTTP ${request.status}`,
                 );
-                err.status = request.status;
-                reject(err);
+                error.status = request.status;
+                reject(error);
               }
             };
-            request.send(part);
+            request.send(files[index].slice(offset, end));
           });
-          record.files[index].uploaded = data.uploaded;
+          confirmRange(record.files[index], offset, end);
           saveHistory();
+        } finally {
+          sender.pending.delete(key);
           updateUploadProgress(record);
         }
-      }
-    }
-    const results = await Promise.allSettled([worker(), worker()]);
-    const failed = results.find((r) => r.status === "rejected");
-    if (failed) throw failed.reason;
+      },
+      abort.signal,
+    );
   } catch (err) {
     if (err.status === 410) record.expired = true;
+    if (sender.preparing && sender.signal) {
+      sender.signal.close();
+      sender.signal = null;
+    }
     if (![...senders.values()].some((s) => s !== sender && s.running))
       galaxy?.stopWarp();
     message(`${t("failed")}: ${err.message}`, true);
   } finally {
     sender.running = false;
+    sender.preparing = false;
     sender.pending.clear();
     saveHistory();
     renderHistory();
@@ -754,6 +769,7 @@ function renderReceiver() {
 async function refreshReceiver() {
   try {
     receivedSpace = await api(`/api/spaces/${spaceID}`);
+    downloadJob?.peer?.updateMetadata(receivedSpace);
     renderReceiver();
   } catch (err) {
     message(err.status === 410 ? t("expired") : err.message, true);
@@ -803,12 +819,19 @@ async function beginJob() {
       }),
     20000,
   );
-  job.peer = new PeerLink(
+  job.peer = new TorrentTransfer(
     spaceID,
     "receiver",
     job.token,
     receivedSpace.expires,
+    null,
+    (status) => ($("download-status").textContent = t(status)),
+    (err) => {
+      console.warn("WebTorrent:", err);
+      message(err.message, true);
+    },
   );
+  job.peer.metadata = receivedSpace;
   return job;
 }
 async function endJob(job, completed) {
@@ -832,53 +855,78 @@ async function endJob(job, completed) {
 $("cancel-download").onclick = () =>
   downloadJob?.abort.abort(new DOMException(t("cancelled"), "AbortError"));
 
-async function downloadFile(index) {
-  const file = receivedSpace.files[index];
+function emptyFileStream() {
+  return new ReadableStream({
+    start(controller) {
+      controller.close();
+    },
+  });
+}
+function monitorStream(stream, total, progress = { received: 0 }) {
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(bytes, controller) {
+        progress.received += bytes.length;
+        $("download-progress").value = total ? progress.received / total : 1;
+        controller.enqueue(bytes);
+      },
+    }),
+  );
+}
+async function receiveFiles(indices) {
   let writer, job;
+  const archive = indices.length > 1;
+  const name = archive ? "Quickfile.zip" : receivedSpace.files[indices[0]].name;
   try {
     if (window.showSaveFilePicker) {
-      const handle = await showSaveFilePicker({ suggestedName: file.name });
+      const handle = await showSaveFilePicker({ suggestedName: name });
       writer = await handle.createWritable();
     }
     job = await beginJob();
-    if (!writer) {
-      nativeDownload(
-        `/api/spaces/${spaceID}/files/${index}?claim=${job.token}&native=1`,
-      );
-      $("download-status").textContent = t("browserSave");
-      await endJob(job, false);
-      return;
-    }
-    let next = 0,
-      received = 0;
+    job.abort.signal.addEventListener("abort", () => job.peer.close(), {
+      once: true,
+    });
     $("download-progress").hidden = false;
     $("download-progress").value = 0;
-    async function worker() {
-      while (next < file.size) {
-        if (job.abort.signal.aborted) throw job.abort.signal.reason;
-        const offset = next,
-          length = Math.min(1024 ** 2, file.size - offset);
-        next += length;
-        const bytes = await fetchBlock(job, index, offset, length);
-        await writer.write({ type: "write", position: offset, data: bytes });
-        received += length;
-        $("download-progress").value = file.size ? received / file.size : 1;
+    $("download-status").textContent = t("preparing");
+    let stream;
+    if (archive) {
+      const total = indices.reduce(
+        (sum, index) => sum + receivedSpace.files[index].size,
+        0,
+      );
+      const progress = { received: 0 };
+      async function* entries() {
+        for (const index of indices) {
+          const file = receivedSpace.files[index];
+          const input = file.size
+            ? (await job.peer.file(index)).stream()
+            : emptyFileStream();
+          yield {
+            name: file.name,
+            size: file.size,
+            input: monitorStream(input, total, progress),
+          };
+        }
       }
+      stream = downloadZip(entries()).body;
+    } else {
+      const index = indices[0],
+        file = receivedSpace.files[index];
+      stream = file.size
+        ? (await job.peer.file(index)).stream()
+        : emptyFileStream();
+      stream = monitorStream(stream, file.size);
     }
-    const results = await Promise.allSettled(
-      Array.from({ length: 4 }, () => worker()),
-    );
-    const failure = results.find((r) => r.status === "rejected");
-    if (failure) throw failure.reason;
-    await writer.close();
+    await saveStream(stream, name, writer, job.abort.signal, job.token);
     writer = null;
+    $("download-progress").value = 1;
     $("download-status").textContent = t("saved");
     await endJob(job, true);
     job = null;
   } catch (err) {
-    if (writer) {
+    if (writer)
       await writer.abort().catch((e) => console.warn("Abort file save:", e));
-    }
     if (job) await endJob(job, false);
     $("download-status").textContent =
       err.name === "AbortError"
@@ -886,77 +934,11 @@ async function downloadFile(index) {
         : `${t("failed")}: ${err.message}`;
   }
 }
-
-async function fetchBlock(job, index, offset, length) {
-  const direct = job.peer.block(index, offset, length, job.abort.signal);
-  if (direct) {
-    try {
-      const bytes = await direct;
-      $("download-status").textContent = t("peer");
-      return bytes;
-    } catch (err) {
-      if (job.abort.signal.aborted) throw err;
-      console.warn(
-        "Direct transfer interrupted; resuming from stored bytes:",
-        err,
-      );
-    }
-  }
-  while (!job.abort.signal.aborted) {
-    try {
-      $("download-status").textContent = t("server");
-      const response = await fetch(`/api/spaces/${spaceID}/files/${index}`, {
-        headers: {
-          Authorization: `Bearer ${job.token}`,
-          Range: `bytes=${offset}-${offset + length - 1}`,
-        },
-        signal: AbortSignal.any([job.abort.signal, AbortSignal.timeout(90000)]),
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        const error = new Error(`HTTP ${response.status}`);
-        error.status = response.status;
-        throw error;
-      }
-      const data = new Uint8Array(await response.arrayBuffer());
-      if (data.length !== length) throw new Error("Incomplete download block");
-      return data;
-    } catch (err) {
-      if (job.abort.signal.aborted) throw job.abort.signal.reason;
-      if (err.status && err.status < 500) {
-        job.abort.abort(err);
-        throw err;
-      }
-      console.warn("Stored download retry:", err);
-      $("download-status").textContent = t("retry");
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-    }
-  }
-  throw job.abort.signal.reason;
+async function downloadFile(index) {
+  return receiveFiles([index]);
 }
-function nativeDownload(url) {
-  const frame = element("iframe", "download-frame");
-  frame.src = url;
-  document.body.append(frame);
-}
-$("download-all").onclick = async () => {
-  if (receivedSpace.files.length === 1) {
-    await downloadFile(0);
-    return;
-  }
-  let job;
-  try {
-    job = await beginJob();
-    nativeDownload(
-      `/api/spaces/${spaceID}/archive?claim=${job.token}&native=1`,
-    );
-    $("download-status").textContent = t("browserSave");
-    await endJob(job, false);
-  } catch (err) {
-    if (job) await endJob(job, false);
-    message(err.message, true);
-  }
-};
+$("download-all").onclick = () =>
+  receiveFiles(receivedSpace.files.map((_, index) => index));
 
 window.addEventListener("beforeunload", (event) => {
   if ([...senders.values()].some((s) => s.running) || downloadJob) {

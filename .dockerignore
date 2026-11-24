@@ -2,6 +2,7 @@
 .serena
 .qa
 dist
+node_modules
 data
 .env
 README.md

@@ -30,9 +30,9 @@ Quickfile 是一个内嵌前端的 Go 文件分享服务。一个可执行文件
 | 边传边下 | 接收方可以读取已经上传的数据，继续等待后续分片 |
 | 自动直连 | 发送方在线时尝试 WebRTC P2P，直连不可用时使用 HTTPS 暂存路径 |
 | 稍后领取 | 文件上传完成后，发送方可以关闭网页 |
-| 分片与续传 | 4 MiB 上传分片，支持恢复上传、HTTP Range 和断点下载 |
-| 并行下载 | 支持文件写入接口的浏览器使用四路分片保存单文件 |
-| 多文件打包 | “下载全部”由服务器实时生成 ZIP，支持 ZIP64 |
+| 分片与续传 | 4 MiB 上传分片，单文件和多文件统一调度，按分片耗时在 1–5 路间自适应并发；重启后可补齐缺片 |
+| WebTorrent 下载 | 使用 WebTorrent 分片调度和 SHA-1 完整性校验，同时支持 WebRTC P2P 与领取凭据保护的 HTTP Web Seed |
+| 多文件打包 | 网页从 WebTorrent 流生成 ZIP64 并流式保存；HTTP/MCP 继续支持服务端 ZIP |
 | 自动删除 | 默认 24 小时或 100 次领取，先满足的条件生效 |
 | 简单界面 | 银河动画、半透明面板、中英文切换和浏览器本地空间列表 |
 | 单文件部署 | 前端随 Go 二进制分发，无数据库，无需 Node.js 运行时 |
@@ -150,15 +150,15 @@ docker compose -f compose.yaml -f compose.public.yaml up -d
 
 ## 传输与隐私
 
-单文件下载自动使用 WebRTC 直连或 HTTPS。P2P 通过公开 STUN 服务发现路径，无需自建 TURN。发送方会同时把文件上传到服务器，以便之后离线领取。多文件 ZIP 由服务器生成并传输。
+网页使用 WebTorrent 调度每个文件的 4 MiB 分片，并校验 SHA-1。WebRTC P2P 和 HTTP Web Seed 共用分片调度；HTTP 源只声明服务器已确认的分片。每个文件使用独立的私有 torrent，不连接公共 tracker、DHT 或 LSD。P2P 通过公开 STUN 服务发现路径；无法直连时由 HTTP 源提供数据。发送方同时上传文件，以便之后离线领取。网页 ZIP 从这些文件流生成；HTTP/MCP 仍可使用服务端 ZIP。
 
 WebRTC 使用 DTLS，公网访问通过 HTTPS。**暂存文件以原始数据保存在服务器磁盘上，当前版本没有客户端端到端加密。** 分享链接应只交给预期的接收方。
 
-支持 File System Access 的浏览器可四路分段写入磁盘，其他浏览器使用原生下载器。具体的文件保存和续传体验取决于浏览器支持。
+支持 File System Access 的浏览器直接流式写盘，其他支持 Service Worker 的浏览器使用原生下载器。接收分片暂存于 IndexedDB，并在本次传输结束时清理，因此浏览器必须有足够的站点存储配额。网页重新下载会重新调度分片；HTTP 客户端仍可通过 Range 续传。
 
 ## 构建与发布
 
-源码构建需要 Go 1.26 或更新版本。
+源码构建需要 Go 1.26 或更新版本。WebTorrent 浏览器包已随源码提交，Go 构建无需 Node.js；修改依赖时先用 Node.js 22 或更新版本执行 `npm ci --ignore-scripts --no-audit --no-fund` 和 `npm run build:webtorrent`。CI 会重建浏览器包并检查差异。
 
 ```sh
 go build -trimpath -o quickfile .
@@ -181,7 +181,7 @@ url = "https://file.011f.com/mcp"
 
 调用 `share_file({"name":"hello.txt","text":"Hello!"})` 即可获取分享链接。多个文件或大文件使用 `create_space`、`upload_chunk`；Agent 必须先读取自己电脑上的文件，再提交 Base64 分片，远程 MCP 不读取客户端本地路径。也可将原始分片直接发送到返回的 HTTP 上传地址。
 
-共 11 个工具覆盖全部 REST API，并提供 WebSocket 信令连接信息。文件下载支持 HTTP 地址或 Base64 字节范围，ZIP 使用 HTTP 流式下载。每个空间的上传凭据和领取凭据由工具返回并沿用原有校验，无需用户手动申请。领取一次后复用同一个 claim，在接收期间定期心跳，保存完成后调用 `complete_download`。
+共 13 个工具覆盖全部 REST API，并提供 WebSocket 信令连接信息。`upload_chunk` 支持 `parallel:true`，`publish_torrent` 和 `get_torrent` 用于发布及获取分片元数据。文件下载支持 HTTP 地址或 Base64 字节范围，ZIP 使用 HTTP 流式下载。每个空间的上传凭据和领取凭据由工具返回并沿用原有校验，无需用户手动申请。领取一次后复用同一个 claim，在接收期间定期心跳，保存完成后调用 `complete_download`。
 
 完整的 Codex、DeepSeek Harness、Claude Code、Cursor 配置和工具映射见 [MCP 索引模板](web/mcp.txt)，运行中的索引会自动使用当前站点地址。MCP 还提供 `quickfile://mcp/index` 资源。客户端自身的工具审批设置由客户端管理。
 
@@ -190,8 +190,10 @@ url = "https://file.011f.com/mcp"
 | 请求 | 用途 |
 | --- | --- |
 | `POST /api/spaces` | 提交 `{files:[{name,size}],hours,maxDownloads}`，立即获取空间和上传凭据 |
-| `GET /api/spaces/{id}` | 获取文件列表和已上传偏移 |
-| `PATCH /api/spaces/{id}/files/{index}` | 使用上传凭据和 `Upload-Offset` 追加分片 |
+| `GET /api/spaces/{id}` | 获取文件列表、连续已上传偏移和乱序分片 ranges |
+| `PATCH /api/spaces/{id}/files/{index}` | 使用上传凭据和 `Upload-Offset` 追加分片；`Upload-Mode: parallel` 接受不重叠的乱序分片 |
+| `POST /api/spaces/{id}/files/{index}/torrent` | 使用上传凭据发布不可变的 SHA-1 分片哈希 |
+| `GET /api/spaces/{id}/files/{index}/torrent` | 使用上传或领取凭据获取私有 torrent |
 | `POST /api/spaces/{id}/claims` | 提交随机的 48 位十六进制 `{token}`，预留领取次数，同 token 重试幂等 |
 | `POST /api/spaces/{id}/heartbeat` | 延长当前领取的活动时间 |
 | `GET /api/spaces/{id}/files/{index}` | 下载完整文件或 `Range` 指定的部分，等待尚未上传的数据 |
@@ -203,6 +205,6 @@ url = "https://file.011f.com/mcp"
 
 ## 协议与致谢
 
-本项目代码和自行编写的文档采用 [MIT 协议](LICENSE)。
+本项目代码和自行编写的文档采用 [MIT 协议](LICENSE)。WebTorrent 及浏览器依赖的版本锁定在 `package-lock.json`，保留[第三方许可声明](web/WEBTORRENT-LICENSES.txt)。
 
 界面参考 [Wormhole](https://wormhole.app/)。银河纹理与标记来自其公开页面，这些素材的权利归原作者，项目的 MIT 授权不覆盖这些第三方素材。背景使用 Three.js r135 绘制，保留其 [MIT 许可证](web/THREE-LICENSE.txt)。银河渲染逻辑按 Wormhole 的公开前端实现移植，使用同版 GSAP 3.10.4 与 RoughEase，保留脚本中的 GreenSock 版权及许可声明；这部分第三方代码不包含在本项目的 MIT 授权中。二维码使用 [Project Nayuki 的 QR Code generator](https://www.nayuki.io/page/qr-code-generator-library)，保留代码中的 MIT 许可证。

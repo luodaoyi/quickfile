@@ -11,7 +11,20 @@ permissions:
   contents: read
 
 jobs:
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Rebuild pinned browser dependencies
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm run build:webtorrent
+          git diff --exit-code -- web/webtorrent.js web/webtorrent.js.LEGAL.txt web/WEBTORRENT-LICENSES.txt
+          node --check web/upload.js
+          node --check web/save.js
+          node --check web/download-worker.js
   binaries:
+    needs: browser
     runs-on: ubuntu-latest
     strategy:
       matrix:
