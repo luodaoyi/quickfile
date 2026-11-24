@@ -58,6 +58,7 @@ type space struct {
 	deleted bool
 	active  int
 	peers   map[string]*peer
+	uploads []sync.Mutex
 }
 
 type fileStore struct {
@@ -123,6 +124,15 @@ func openStore(root string) (*fileStore, error) {
 				}
 			}
 		}
+		staged, err := filepath.Glob(filepath.Join(dir, "chunk-*.part"))
+		if err != nil {
+			return nil, err
+		}
+		for _, path := range staged {
+			if err := os.Remove(path); err != nil {
+				return nil, fmt.Errorf("remove uncommitted chunk: %w", err)
+			}
+		}
 		s.spaces[m.ID] = newSpace(m, dir)
 	}
 	s.clean(time.Now())
@@ -130,7 +140,7 @@ func openStore(root string) (*fileStore, error) {
 }
 
 func newSpace(m metadata, dir string) *space {
-	return &space{meta: m, dir: dir, changed: make(chan struct{}), done: make(chan struct{}), peers: make(map[string]*peer)}
+	return &space{meta: m, dir: dir, changed: make(chan struct{}), done: make(chan struct{}), peers: make(map[string]*peer), uploads: make([]sync.Mutex, len(m.Files))}
 }
 
 func (s *space) save() error {

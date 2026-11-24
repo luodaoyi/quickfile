@@ -185,31 +185,81 @@ func (a *application) upload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	sp.mu.Lock()
-	defer sp.mu.Unlock()
 	if !sp.live() {
+		sp.mu.Unlock()
 		writeError(w, 410, errGone.Error())
 		return
 	}
 	if !sp.owner(bearer(r)) {
+		sp.mu.Unlock()
 		writeError(w, 403, "invalid upload credential")
 		return
 	}
 	i, ok := fileIndex(r, sp)
 	offset, err := strconv.ParseInt(r.Header.Get("Upload-Offset"), 10, 64)
 	if !ok || err != nil || r.ContentLength <= 0 || r.ContentLength > chunkSize {
+		sp.mu.Unlock()
 		writeError(w, 400, "invalid file, chunk size, or offset")
 		return
 	}
-	if offset != sp.meta.Files[i].Uploaded {
-		writeJSON(w, 409, map[string]any{"error": "offset mismatch", "uploaded": sp.meta.Files[i].Uploaded})
+	expires := sp.meta.Expires
+	sp.mu.Unlock()
+	sp.uploads[i].Lock()
+	defer sp.uploads[i].Unlock()
+	sp.mu.Lock()
+	if !sp.live() {
+		sp.mu.Unlock()
+		writeError(w, 410, errGone.Error())
 		return
 	}
-	if r.ContentLength > sp.meta.Files[i].Size-offset {
+	uploaded, size := sp.meta.Files[i].Uploaded, sp.meta.Files[i].Size
+	sp.mu.Unlock()
+	if offset != uploaded {
+		writeJSON(w, 409, map[string]any{"error": "offset mismatch", "uploaded": uploaded})
+		return
+	}
+	if r.ContentLength > size-offset {
 		writeError(w, 400, "chunk exceeds declared file size")
 		return
 	}
+	// Receive outside the metadata lock so a slow uploader cannot stall links or downloads.
+	staged, err := os.CreateTemp(sp.dir, "chunk-*.part")
+	if err != nil {
+		writeError(w, 507, "cannot stage upload: "+err.Error())
+		return
+	}
+	defer func() {
+		if err := os.Remove(staged.Name()); err != nil && !errors.Is(err, os.ErrNotExist) {
+			slog.Error("remove staged chunk", "error", err)
+		}
+	}()
+	controller := http.NewResponseController(w)
+	if err := controller.SetReadDeadline(expires); err != nil {
+		staged.Close()
+		writeError(w, 500, "cannot set upload expiry: "+err.Error())
+		return
+	}
+	defer controller.SetReadDeadline(time.Time{})
 	r.Body = http.MaxBytesReader(w, r.Body, chunkSize)
-	if err := sp.appendChunk(i, offset, r.Body, r.ContentLength); err != nil {
+	_, readErr := io.CopyN(staged, r.Body, r.ContentLength)
+	closeErr := staged.Close()
+	if err := errors.Join(readErr, closeErr); err != nil {
+		writeError(w, 400, "incomplete upload chunk: "+err.Error())
+		return
+	}
+	src, err := os.Open(staged.Name())
+	if err != nil {
+		writeError(w, 507, "cannot read staged chunk: "+err.Error())
+		return
+	}
+	defer src.Close()
+	sp.mu.Lock()
+	defer sp.mu.Unlock()
+	if !sp.live() {
+		writeError(w, 410, errGone.Error())
+		return
+	}
+	if err := sp.appendChunk(i, offset, src, r.ContentLength); err != nil {
 		slog.Error("upload chunk", "space", sp.meta.ID, "file", i, "error", err)
 		writeError(w, 507, "upload failed: "+err.Error())
 		return

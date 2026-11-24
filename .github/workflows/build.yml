@@ -28,6 +28,8 @@ jobs:
           go vet ./...
           test -z "$(gofmt -l *.go)"
           node --check web/app.js
+          node --check web/peer.js
+          node --check web/background.js
           target='${{ matrix.target }}'
           export GOOS="${target%-*}" GOARCH="${target#*-}" CGO_ENABLED=0
           suffix=''

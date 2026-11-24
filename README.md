@@ -60,6 +60,10 @@ P2P 使用公开 STUN 服务发现直连路径，不需要自建 TURN。直连�
 
 镜像包含 `latest`、提交 SHA 和版本标签。GHCR 首次发布后，仓库所有者需要确保容器包可见性为 Public，才能匿名拉取。
 
+界面按 Wormhole 的银河背景、半透明面板、上传框和按钮布局制作。银河纹理及标记来自其公开页面资源，背景使用随程序内嵌的 Three.js r135 绘制，其 MIT 许可证保存在 `web/THREE-LICENSE.txt`。
+
 ## Cloudflare
 
-小分片上传用于兼容 Cloudflare 的单次请求大小限制。保持 WebSocket 可用并禁用 `/api/*` 缓存。反向代理必须关闭响应缓冲，上传大小至少允许 4 MiB。源站可通过 Cloudflare Tunnel 私网连接，或以仅允许 Cloudflare 来源的 HTTPS 入口提供服务。
+小分片上传用于兼容 Cloudflare 的单次请求大小限制。保持 WebSocket 可用并禁用 `/api/*` 缓存。反向代理必须关闭响应缓冲，上传大小至少允许 4 MiB。仓库提供 `deploy/Caddyfile` 和 `deploy/compose.public.yaml`，复制到 Compose 所在目录，运行 `docker compose -f compose.yaml -f compose.public.yaml up -d` 即可启用 `file.011f.com` 的 HTTPS 入口。该入口自动申请并续期证书，只允许 Cloudflare 官方地址段回源。DNS 应使用已代理的 A 记录指向源站，SSL/TLS 使用 Full (strict)。Cloudflare 官方地址段变化时需同步 Caddyfile。
+
+当前部署位置为 `ssh ccs` 的 `/opt/quickfile`，数据为 `/opt/quickfile/data`。源站系统盘为 20 GiB，首次部署时剩余约 6.6 GiB，因此上传完整 10 GiB 文件前必须补足磁盘空间。
