@@ -57,7 +57,8 @@ export async function startGalaxy(canvas) {
   resize();
   window.addEventListener("resize", resize);
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-  let previous = 0;
+  let previous = null;
+  let framesSinceRender = 0;
   let warpStarted = null;
   let warping = false;
   let warpOffset = 0;
@@ -72,8 +73,15 @@ export async function startGalaxy(canvas) {
   };
   function animate(now) {
     requestAnimationFrame(animate);
-    if (document.hidden || reducedMotion.matches || now - previous < 50) return;
-    const elapsed = previous ? now - previous : 0;
+    if (document.hidden || reducedMotion.matches) {
+      previous = null;
+      framesSinceRender = 0;
+      return;
+    }
+    // Match the reference: every third refresh at rest, every refresh during warp.
+    if (++framesSinceRender < 3 && !warping) return;
+    framesSinceRender = 0;
+    const elapsed = previous === null ? 0 : now - previous;
     previous = now;
     const speed = innerWidth > 1500 ? 0.006 : innerWidth > 1000 ? 0.012 : 0.018;
     texture.offset.y += (elapsed / 1000) * speed;
