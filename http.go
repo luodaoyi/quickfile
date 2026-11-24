@@ -36,6 +36,14 @@ func (a *application) routes() http.Handler {
 	mux.HandleFunc("GET /api/spaces/{id}/files/{file}", a.download)
 	mux.HandleFunc("GET /api/spaces/{id}/archive", a.archive)
 	mux.HandleFunc("GET /api/spaces/{id}/ws", a.socket)
+	mcpHandler := a.mcpHandler()
+	mux.Handle("GET /mcp", mcpHandler)
+	mux.Handle("POST /mcp", mcpHandler)
+	mux.Handle("DELETE /mcp", mcpHandler)
+	mux.HandleFunc("GET /mcp/{$}", a.mcpIndex)
+	mux.HandleFunc("GET /mcp/index.txt", a.mcpIndex)
+	mux.HandleFunc("GET /mcp/index", a.mcpIndex)
+	mux.HandleFunc("GET /llms.txt", a.mcpIndex)
 	mux.HandleFunc("GET /s/{id}", func(w http.ResponseWriter, r *http.Request) {
 		r.URL.Path = "/"
 		a.assets.ServeHTTP(w, r)

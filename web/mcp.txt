@@ -1,0 +1,162 @@
+Quickfile MCP — public file sharing for agents
+============================================
+
+Endpoint: {{BASE_URL}}/mcp
+Transport: Streamable HTTP (JSON responses, stateless)
+Authentication: none. No login, API key, bearer header or OAuth setup.
+Plain-text guide: {{BASE_URL}}/mcp/index.txt
+Discovery alias: {{BASE_URL}}/llms.txt
+MCP resource: quickfile://mcp/index
+
+中文说明
+--------
+Quickfile 是公开的文件分享服务。连接 MCP 不需要账号或授权。
+可直接调用 share_file 分享文本或小文件；也可创建多文件空间后分片上传。
+文件默认保留 24 小时，最多领取 100 次，先达到的条件生效。
+单文件最大 10 GiB，上传分片最大 4 MiB。接收方可以边传边下。
+服务端磁盘以明文保存文件；当前没有端到端加密。
+
+无需配置服务访问凭据，但每个空间仍有上传凭据 owner 和领取凭据 claim。
+工具会返回这些凭据，Agent 可直接接着调用；无需用户手动申请。
+只把 shareUrl 发给接收者。owner 必须保密，claim 只交给当前接收任务。
+客户端自身的工具审批规则仍由客户端管理。
+
+远程 MCP 无法读取 Agent 电脑上的路径。不要把 C:\path\file 或 /path/file
+当作上传内容。请用 Agent 的文件/终端工具读取文件，再提交 Base64 分片；
+大文件优先直接使用 HTTP PATCH，避免把大量 Base64 放进模型上下文。
+MCP 请求正文上限为 4 MiB 的 Base64 大小加 1 MiB JSON 元数据空间。
+这是现有上传分片和 JSON 限制的协议包装；大文件需分片，不要一次塞入工具调用。
+
+Codex
+-----
+Add to ~/.codex/config.toml (Windows: %USERPROFILE%\.codex\config.toml):
+
+[mcp_servers.quickfile]
+url = "{{BASE_URL}}/mcp"
+
+Or run:
+codex mcp add quickfile --url {{BASE_URL}}/mcp
+
+DeepSeek Harness
+----------------
+Add one plugin row in the intended DSH plugin configuration scope:
+
+- id: mcp-quickfile
+  name: '@deepseek-ai/dsh-mcp-client'
+  config:
+    serverName: quickfile
+    transport: streamable-http
+    url: {{BASE_URL}}/mcp
+
+No headers or OAuth entry is needed. The tool names become
+mcp__quickfile__share_file, mcp__quickfile__create_space, etc.
+Configuration reference:
+https://github.com/deepseek-ai/deepseek-harness/tree/master/packages/mcp/mcp-client
+
+Claude Code
+-----------
+claude mcp add --transport http quickfile {{BASE_URL}}/mcp
+
+Cursor / compatible MCP clients
+------------------------------
+Add an HTTP server to the client's MCP configuration:
+
+{
+  "mcpServers": {
+    "quickfile": {
+      "url": "{{BASE_URL}}/mcp"
+    }
+  }
+}
+
+Restart/reload the client's MCP connection after editing its configuration.
+An agent should merge this server into the user's existing configuration;
+do not overwrite unrelated servers or change the client's approval settings.
+
+Share a file in one tool call
+----------------------------
+Tool: share_file
+Arguments:
+{"name":"hello.txt","text":"Hello from Quickfile!","hours":24,"maxDownloads":100}
+
+Binary alternative: supply dataBase64 instead of text, using standard Base64.
+Exactly one of text/dataBase64 is required; text:"" creates an empty file.
+The result contains shareUrl, owner, space and chunkSize.
+
+Large files, multiple files, immediate links and resume
+------------------------------------------------------
+1. create_space:
+   {"files":[{"name":"example.bin","size":12345}],"hours":24,"maxDownloads":100}
+2. Save the returned owner privately and share shareUrl immediately.
+3. upload_chunk:
+   {"spaceId":"<returned ID>","fileIndex":0,"owner":"<returned owner>",
+    "offset":0,"dataBase64":"<standard Base64 of at most 4194304 file bytes>"}
+4. Advance offset to the returned uploaded value and repeat for each file.
+   Empty files are complete at creation and do not need an upload chunk.
+5. On an offset conflict, call get_space and resume at its confirmed uploaded
+   offset. On transport failure, inspect get_space before resending a chunk.
+
+For local file upload without feeding bytes through the model, use the upload URL
+returned by create_space. PATCH each raw chunk with these headers:
+Authorization: Bearer <owner>
+Upload-Offset: <confirmed byte offset>
+Send at most 4194304 raw bytes per request, not multipart/form-data.
+
+Receive and save
+----------------
+1. get_space: {"spaceId":"<ID from shareUrl>"}
+2. claim_space: {"spaceId":"<ID>"}
+   Save the returned claim. For idempotent reservation/retry, generate and keep
+   a 48-hex token first and pass token explicitly. Omitting token reserves a NEW
+   pickup, so never repeat a reservation blindly after losing its response.
+3. download_file: {"spaceId":"<ID>","fileIndex":0,"claim":"<claim>"}
+   Returns a streaming HTTP URL. Use an HTTP client or browser to save it.
+   Optional offset/length returns that range as dataBase64. Use 4 MiB ranges
+   for large files and keep data out of the conversational response.
+4. For a ZIP of all files, use download_archive with spaceId and claim.
+   This returns a streaming URL rather than buffering a ZIP in a tool response.
+5. Reuse ONE claim across all files, ranges and retries. Call heartbeat every
+   20 seconds while downloading or waiting. Claims idle for 2 minutes expire.
+6. Call complete_download only after every requested file has been saved.
+   The last completed pickup may trigger permanent deletion of the files.
+
+All REST APIs and corresponding MCP tools
+-----------------------------------------
+GET  /healthz                             -> health
+POST /api/spaces                          -> create_space
+GET  /api/spaces/{id}                     -> get_space
+PATCH /api/spaces/{id}/files/{index}       -> upload_chunk
+POST /api/spaces/{id}/claims              -> claim_space
+POST /api/spaces/{id}/heartbeat           -> heartbeat
+POST /api/spaces/{id}/complete            -> complete_download
+GET  /api/spaces/{id}/files/{index}       -> download_file (URL or Base64 range)
+GET  /api/spaces/{id}/archive             -> download_archive (streaming URL)
+GET  /api/spaces/{id}/ws                  -> get_signaling_info (connection info)
+Convenience workflow                      -> share_file
+
+get_signaling_info returns a WebSocket URL template and signaling instructions.
+A WebRTC-capable client opens that connection itself. Stateless MCP does not
+tunnel a persistent WebSocket or transfer files through a fake P2P implementation.
+The shipped browser client at {{BASE_URL}}/peer.js implements signaling and
+the data-channel protocol. Regular MCP sharing uses the real HTTPS storage path.
+
+Retention options: hours = 1, 2, 6, 12, 24 (default 24).
+Pickup options: maxDownloads = 1, 5, 10, 20, 50, 100 (default 100).
+File names must be plain names, without directory separators or control characters.
+
+Raw MCP protocol example
+------------------------
+POST {{BASE_URL}}/mcp
+Content-Type: application/json
+Accept: application/json, text/event-stream
+
+{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"quickfile-agent","version":"1.0"}}}
+
+Then send notifications/initialized (no id), tools/list, and tools/call according
+to the negotiated protocol version. Let an official MCP client SDK handle this.
+No MCP session ID or authentication header is required by this stateless server.
+Browser GET /mcp shows this plain-text guide; transport GET/SSE is not used.
+
+Errors are real failures, not success-shaped placeholders. Fix the input or
+inspect the space before retrying. A failed share_file upload reports the
+created space and owner so the upload can be resumed rather than recreated.
