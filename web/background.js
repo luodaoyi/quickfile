@@ -49,7 +49,7 @@ export async function startGalaxy(canvas) {
 
   function resize() {
     renderer.setPixelRatio(Math.min(devicePixelRatio * 0.75, 1));
-    renderer.setSize(innerWidth, innerHeight);
+    renderer.setSize(innerWidth, innerHeight, false);
     camera.aspect = innerWidth / innerHeight;
     camera.updateProjectionMatrix();
     renderer.render(scene, camera);

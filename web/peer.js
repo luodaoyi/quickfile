@@ -196,7 +196,7 @@ export class PeerLink {
         signal.removeEventListener("abort", abort);
         reject(new Error("P2P block timed out"));
         this.channel?.close();
-      }, 15000);
+      }, 90000);
       const cleanup = () => {
         clearTimeout(timer);
         signal.removeEventListener("abort", abort);

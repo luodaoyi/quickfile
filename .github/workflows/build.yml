@@ -42,13 +42,23 @@ jobs:
         with:
           name: quickfile-${{ matrix.target }}
           path: dist/*
-      - name: Attach release binaries
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v3
-        with:
-          files: dist/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: binaries
+    runs-on: ubuntu-latest
     permissions:
       contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: quickfile-*
+          path: dist
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v3
+        with:
+          files: dist/*
+          generate_release_notes: true
 
   docker:
     runs-on: ubuntu-latest

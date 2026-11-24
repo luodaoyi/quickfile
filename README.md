@@ -66,4 +66,4 @@ P2P 使用公开 STUN 服务发现直连路径，不需要自建 TURN。直连�
 
 小分片上传用于兼容 Cloudflare 的单次请求大小限制。保持 WebSocket 可用并禁用 `/api/*` 缓存。反向代理必须关闭响应缓冲，上传大小至少允许 4 MiB。仓库提供 `deploy/Caddyfile` 和 `deploy/compose.public.yaml`，复制到 Compose 所在目录，运行 `docker compose -f compose.yaml -f compose.public.yaml up -d` 即可启用 `file.011f.com` 的 HTTPS 入口。该入口自动申请并续期证书，只允许 Cloudflare 官方地址段回源。DNS 应使用已代理的 A 记录指向源站，SSL/TLS 使用 Full (strict)。Cloudflare 官方地址段变化时需同步 Caddyfile。
 
-当前部署位置为 `ssh ccs` 的 `/opt/quickfile`，数据为 `/opt/quickfile/data`。源站系统盘为 20 GiB，首次部署时剩余约 6.6 GiB，因此上传完整 10 GiB 文件前必须补足磁盘空间。
+当前部署位置为 `ssh ccs` 的 `/opt/quickfile`，数据为 `/opt/quickfile/data`。服务器由用户迁移为 Podman，使用 `podman-compose -f compose.yaml -f compose.public.yaml up -d --no-deps --force-recreate quickfile` 更新应用容器。保留已运行的 Caddy 容器及其证书卷。源站系统盘为 20 GiB，迁移后剩余约 13 GiB，实际可用容量随暂存文件变化。

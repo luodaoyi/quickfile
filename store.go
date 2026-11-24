@@ -322,9 +322,11 @@ func (s *fileStore) shutdown() {
 	defer s.mu.RUnlock()
 	for _, sp := range s.spaces {
 		sp.mu.Lock()
-		sp.deleted = true
-		close(sp.done)
-		sp.notify()
+		if !sp.deleted {
+			sp.deleted = true
+			close(sp.done)
+			sp.notify()
+		}
 		sp.mu.Unlock()
 	}
 }
