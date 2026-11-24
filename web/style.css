@@ -451,6 +451,38 @@ iframe.download-frame {
   justify-content: space-between;
   gap: 16px;
 }
+.header-actions,
+.mcp-heading,
+.mcp-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.mcp-dialog {
+  width: min(880px, calc(100% - 32px));
+  max-height: calc(100svh - 48px);
+}
+.mcp-heading {
+  justify-content: space-between;
+}
+.mcp-heading h2 {
+  margin: 0;
+}
+.mcp-dialog > p {
+  line-height: 1.6;
+}
+.mcp-actions {
+  flex-wrap: wrap;
+}
+#mcp-guide {
+  font:
+    14px/1.65 ui-monospace,
+    Consolas,
+    monospace;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin: 24px 0 0;
+}
 .upload-center {
   position: relative;
 }
@@ -590,6 +622,17 @@ iframe.download-frame {
   }
 }
 @media (max-width: 479px) {
+  .page-header {
+    height: auto;
+    min-height: 72px;
+    flex-wrap: wrap;
+  }
+  .header-actions {
+    gap: 8px;
+  }
+  .mcp-dialog {
+    padding: 20px;
+  }
   .share-link-row {
     flex-direction: column;
   }

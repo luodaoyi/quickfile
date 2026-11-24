@@ -19,15 +19,25 @@
         ><img src="/mark.png" width="40" height="40" alt="" />
         <h1>Quickfile</h1></a
       >
-      <button
-        id="send-more"
-        class="primary"
-        type="button"
-        data-i18n="sendMore"
-        hidden
-      >
-        发送更多文件
-      </button>
+      <div class="header-actions">
+        <button
+          id="mcp-open"
+          class="secondary"
+          type="button"
+          aria-haspopup="dialog"
+        >
+          MCP
+        </button>
+        <button
+          id="send-more"
+          class="primary"
+          type="button"
+          data-i18n="sendMore"
+          hidden
+        >
+          发送更多文件
+        </button>
+      </div>
     </header>
     <main>
       <section id="send-view" class="panel send-panel">
@@ -176,6 +186,40 @@
         ><span>简体中文</span>
       </button>
     </footer>
+    <dialog
+      id="mcp-dialog"
+      class="settings-dialog mcp-dialog"
+      aria-labelledby="mcp-title"
+    >
+      <div class="mcp-heading">
+        <h2 id="mcp-title" data-i18n="mcpTitle">通过 MCP 分享文件</h2>
+        <form method="dialog">
+          <button class="secondary" type="submit" data-i18n="done">完成</button>
+        </form>
+      </div>
+      <p data-i18n="mcpIntro">
+        连接公开 MCP，无需账号或 API Key。下面包含使用方法和客户端配置。
+      </p>
+      <div class="mcp-actions">
+        <a
+          class="secondary"
+          href="/mcp/index.txt"
+          target="_blank"
+          rel="noopener"
+          data-i18n="mcpIndex"
+          >纯文本索引</a
+        >
+        <button
+          id="mcp-copy"
+          class="secondary"
+          type="button"
+          data-i18n="mcpCopy"
+        >
+          复制说明与配置
+        </button>
+      </div>
+      <pre id="mcp-guide" role="status" aria-live="polite"></pre>
+    </dialog>
     <dialog id="qr-dialog" class="settings-dialog">
       <h2 data-i18n="scanToDownload">扫码下载</h2>
       <div id="qr-code"></div>

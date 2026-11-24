@@ -102,6 +102,11 @@ const dictionaries = {
   },
 };
 Object.assign(dictionaries.zh, {
+  mcpTitle: "通过 MCP 分享文件",
+  mcpIntro: "连接公开 MCP，无需账号或 API Key。下面包含使用方法和客户端配置。",
+  mcpIndex: "纯文本索引",
+  mcpCopy: "复制说明与配置",
+  mcpLoading: "正在加载 MCP 说明…",
   selectFiles: "选择文件",
   selectFolder: "选择文件夹",
   filesReady: "文件已准备就绪！",
@@ -126,6 +131,12 @@ Object.assign(dictionaries.zh, {
   pickups: "次领取后到期",
 });
 Object.assign(dictionaries.en, {
+  mcpTitle: "Share files with MCP",
+  mcpIntro:
+    "Connect to the public MCP server without an account or API key. Usage and client configurations are below.",
+  mcpIndex: "Plain-text index",
+  mcpCopy: "Copy guide and configuration",
+  mcpLoading: "Loading MCP guide…",
   selectFiles: "Select files",
   selectFolder: "Select a folder",
   filesReady: "Your files are ready to share!",
@@ -523,6 +534,28 @@ document.addEventListener("keydown", (event) => {
     ).focus();
   }
 });
+$("mcp-open").onclick = async () => {
+  $("mcp-guide").textContent = t("mcpLoading");
+  $("mcp-copy").disabled = true;
+  $("mcp-dialog").showModal();
+  try {
+    const response = await fetch("/mcp/index.txt", { cache: "no-store" });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    $("mcp-guide").textContent = await response.text();
+    $("mcp-copy").textContent = t("mcpCopy");
+    $("mcp-copy").disabled = false;
+  } catch (err) {
+    $("mcp-guide").textContent = `${t("failed")}: ${err.message}`;
+  }
+};
+$("mcp-copy").onclick = async () => {
+  try {
+    await navigator.clipboard.writeText($("mcp-guide").textContent);
+    $("mcp-copy").textContent = t("copied");
+  } catch (err) {
+    message(`${t("failed")}: ${err.message}`, true);
+  }
+};
 $("settings-open").onclick = () => $("share-settings").showModal();
 $("dropzone").ondragover = (event) => {
   event.preventDefault();

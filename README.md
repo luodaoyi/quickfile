@@ -168,6 +168,23 @@ go build -trimpath -o quickfile .
 
 健康接口为 `GET /healthz`，返回服务状态和构建版本。
 
+## MCP：让 Agent 分享文件
+
+部署本版本后，导航栏的 **MCP** 菜单会打开使用说明和客户端配置弹窗。服务提供公开的 Streamable HTTP 入口 `/mcp`，不需要账号、API Key 或 OAuth；浏览器直接打开该地址会显示纯文本介绍。`/mcp/index.txt` 和 `/llms.txt` 也提供同一份索引，方便 Agent 自行读取配置说明。
+
+Codex 配置示例（将地址替换为自己的部署地址）：
+
+```toml
+[mcp_servers.quickfile]
+url = "https://file.011f.com/mcp"
+```
+
+调用 `share_file({"name":"hello.txt","text":"Hello!"})` 即可获取分享链接。多个文件或大文件使用 `create_space`、`upload_chunk`；Agent 必须先读取自己电脑上的文件，再提交 Base64 分片，远程 MCP 不读取客户端本地路径。也可将原始分片直接发送到返回的 HTTP 上传地址。
+
+共 11 个工具覆盖全部 REST API，并提供 WebSocket 信令连接信息。文件下载支持 HTTP 地址或 Base64 字节范围，ZIP 使用 HTTP 流式下载。每个空间的上传凭据和领取凭据由工具返回并沿用原有校验，无需用户手动申请。领取一次后复用同一个 claim，在接收期间定期心跳，保存完成后调用 `complete_download`。
+
+完整的 Codex、DeepSeek Harness、Claude Code、Cursor 配置和工具映射见 [MCP 索引模板](web/mcp.txt)，运行中的索引会自动使用当前站点地址。MCP 还提供 `quickfile://mcp/index` 资源。客户端自身的工具审批设置由客户端管理。
+
 ## API
 
 | 请求 | 用途 |

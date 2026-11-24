@@ -168,6 +168,23 @@ go build -trimpath -o quickfile .
 
 The health endpoint, `GET /healthz`, returns the service status and build version.
 
+## MCP for agents
+
+After deploying this version, the **MCP** navigation button opens usage instructions and client configurations. The public Streamable HTTP endpoint is `/mcp`, with no account, API key or OAuth. Browser GET requests display a plain-text guide, also available at `/mcp/index.txt` and `/llms.txt`.
+
+Codex configuration (replace the URL with your own deployment):
+
+```toml
+[mcp_servers.quickfile]
+url = "https://file.011f.com/mcp"
+```
+
+Call `share_file({"name":"hello.txt","text":"Hello!"})` for a share link. Use `create_space` and `upload_chunk` for multiple or large files. Read client-local files using the agent's own filesystem tools and send Base64 chunks, or upload raw chunks to the returned HTTP URL. The remote MCP service cannot read a path on the client's computer.
+
+The 11 tools cover all REST APIs and provide WebSocket signaling connection information. File downloads return an HTTP URL or a Base64 byte range; ZIP downloads stream over HTTP. Per-space owner and claim credentials are returned by the tools and keep their existing validation. Reuse one claim for all files and ranges, send heartbeats while receiving, and call `complete_download` after saving.
+
+See the [MCP index template](web/mcp.txt) for Codex, DeepSeek Harness, Claude Code and Cursor setup and the full tool mapping. The running guide uses the current site's address and is also exposed as the `quickfile://mcp/index` MCP resource. Client-side tool approval settings remain controlled by the client.
+
 ## API
 
 | Request | Purpose |
