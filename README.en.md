@@ -1,4 +1,4 @@
-# Quickfile
+# Quickfile — Open-source temporary file transfer & large file sharing
 
 [简体中文](README.md) | English
 
@@ -7,7 +7,9 @@
 
 Drop your files and copy the link immediately. Uploads continue in the background, and recipients can start receiving before the upload finishes.
 
-Quickfile is a Go file-sharing service with an embedded web interface. It runs as one executable with one data directory, automatically coordinating WebRTC peer-to-peer transfers and temporary server storage.
+Quickfile is an open-source, self-hosted tool for temporary file transfer and large file sharing. Send up to 10 GiB per file with WebTorrent / WebRTC P2P, streaming downloads, adaptive chunked uploads and resumable uploads. Files expire after 24 hours or 100 pickups by default, with no registration required.
+
+Use it to send large videos, design assets, logs and temporary deliverables, or run it as a self-hosted Wormhole alternative. The Go service embeds its frontend in one binary for Linux, Windows and macOS, with Docker / Podman deployment available. A public Model Context Protocol (MCP) server lets AI agents create share links and transfer files directly.
 
 **[Use the hosted instance → file.011f.com](https://file.011f.com/)**
 
@@ -182,6 +184,8 @@ url = "https://file.011f.com/mcp"
 Call `share_file({"name":"hello.txt","text":"Hello!"})` for a share link. Use `create_space` and `upload_chunk` for multiple or large files. Read client-local files using the agent's own filesystem tools and send Base64 chunks, or upload raw chunks to the returned HTTP URL. The remote MCP service cannot read a path on the client's computer.
 
 The 13 tools cover all REST APIs and provide WebSocket signaling connection information. `upload_chunk` accepts `parallel:true`; `publish_torrent` and `get_torrent` publish and retrieve piece metadata. File downloads return an HTTP URL or a Base64 byte range; ZIP downloads stream over HTTP. Per-space owner and claim credentials are returned by the tools and keep their existing validation. Reuse one claim for all files and ranges, send heartbeats while receiving, and call `complete_download` after saving.
+
+Discovery entry points include the [project and agent guide](https://file.011f.com/llms.txt), [sitemap](https://file.011f.com/sitemap.xml) and [GitHub source](https://github.com/luodaoyi/quickfile). The homepage serves descriptive metadata, social cards and structured data. Temporary pickup pages carry `noindex` and are excluded from the sitemap. Self-hosted instances derive site URLs from the current request origin.
 
 See the [MCP index template](web/mcp.txt) for Codex, DeepSeek Harness, Claude Code and Cursor setup and the full tool mapping. The running guide uses the current site's address and is also exposed as the `quickfile://mcp/index` MCP resource. Client-side tool approval settings remain controlled by the client.
 

@@ -1,4 +1,4 @@
-# Quickfile
+# Quickfile — 开源临时文件传输与大文件分享
 
 简体中文 | [English](README.en.md)
 
@@ -7,7 +7,9 @@
 
 拖入文件，立即复制链接。后台继续上传，对方可以在上传完成前开始接收。
 
-Quickfile 是一个内嵌前端的 Go 文件分享服务。一个可执行文件、一个数据目录即可运行，支持 WebRTC 直连和服务器暂存，自动选择传输路径。
+Quickfile 是可自部署的开源临时文件传输与大文件分享工具（temporary file transfer / large file sharing）。单文件最大 10 GiB，支持 WebTorrent / WebRTC P2P、边传边下、自适应分片上传和上传续传；默认 24 小时或 100 次领取后自动删除，无需注册。
+
+适合发送大视频、设计素材、日志和临时交付文件，也可作为自建的 Wormhole 替代方案。服务使用 Go 编写，前端随单个二进制分发，支持 Linux、Windows、macOS 和 Docker / Podman 部署。公开的 MCP 服务让 AI Agent 可以直接创建分享链接并传输文件。
 
 **[立即使用在线站点 → file.011f.com](https://file.011f.com/)**
 
@@ -182,6 +184,8 @@ url = "https://file.011f.com/mcp"
 调用 `share_file({"name":"hello.txt","text":"Hello!"})` 即可获取分享链接。多个文件或大文件使用 `create_space`、`upload_chunk`；Agent 必须先读取自己电脑上的文件，再提交 Base64 分片，远程 MCP 不读取客户端本地路径。也可将原始分片直接发送到返回的 HTTP 上传地址。
 
 共 13 个工具覆盖全部 REST API，并提供 WebSocket 信令连接信息。`upload_chunk` 支持 `parallel:true`，`publish_torrent` 和 `get_torrent` 用于发布及获取分片元数据。文件下载支持 HTTP 地址或 Base64 字节范围，ZIP 使用 HTTP 流式下载。每个空间的上传凭据和领取凭据由工具返回并沿用原有校验，无需用户手动申请。领取一次后复用同一个 claim，在接收期间定期心跳，保存完成后调用 `complete_download`。
+
+供搜索引擎和 AI 检索的入口包括 [项目与 Agent 说明](https://file.011f.com/llms.txt)、[站点地图](https://file.011f.com/sitemap.xml)和 [GitHub 源码](https://github.com/luodaoyi/quickfile)。首页提供标题、描述、分享卡片和结构化数据；临时领取页使用 `noindex`，不会列入站点地图。自部署时这些站点地址自动使用当前访问域名。
 
 完整的 Codex、DeepSeek Harness、Claude Code、Cursor 配置和工具映射见 [MCP 索引模板](web/mcp.txt)，运行中的索引会自动使用当前站点地址。MCP 还提供 `quickfile://mcp/index` 资源。客户端自身的工具审批设置由客户端管理。
 

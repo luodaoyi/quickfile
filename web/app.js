@@ -131,9 +131,9 @@ Object.assign(dictionaries.zh, {
   pickFiles: "选择要发送的文件",
   dropHelp: "或者将文件拖到这里",
   uploadLimit: "文件最大可达 10 GiB",
-  emptyTitle: "简单、私密的文件共享",
+  emptyTitle: "临时文件传输与大文件分享",
   emptyIntro:
-    "拖入文件即可分享链接，对方无需等待上传完成。文件在 24 小时或 100 次领取后自动删除。",
+    "无需注册，单文件最大 10 GiB。支持 P2P 直连与边传边下，默认 24 小时或 100 次领取后删除。开源、自部署，并提供 MCP 供 AI Agent 分享文件。",
   done: "完成",
   open: "打开",
   expireAfter: "后到期",
@@ -162,9 +162,9 @@ Object.assign(dictionaries.en, {
   pickFiles: "Select files to send",
   dropHelp: "Or drag stuff here",
   uploadLimit: "Send up to 10 GiB",
-  emptyTitle: "Simple, private file sharing",
+  emptyTitle: "Temporary file transfer & large file sharing",
   emptyIntro:
-    "Share a link as soon as you choose your files. Downloads can start right away. Files expire after 24 hours or 100 pickups.",
+    "No sign-up. Up to 10 GiB per file, with P2P and streaming downloads. Files expire after 24 hours or 100 pickups by default. Open source, self-hostable, and ready for AI agents through MCP.",
   done: "Done",
   open: "Open",
   expireAfter: "",

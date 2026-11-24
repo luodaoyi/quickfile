@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html/template"
 	"io"
 	"log/slog"
 	"mime"
@@ -18,8 +19,9 @@ import (
 )
 
 type application struct {
-	store  *fileStore
-	assets http.Handler
+	store    *fileStore
+	assets   http.Handler
+	homepage *template.Template
 }
 
 func (a *application) routes() http.Handler {
@@ -46,9 +48,12 @@ func (a *application) routes() http.Handler {
 	mux.HandleFunc("GET /mcp/index.txt", a.mcpIndex)
 	mux.HandleFunc("GET /mcp/index", a.mcpIndex)
 	mux.HandleFunc("GET /llms.txt", a.mcpIndex)
-	mux.HandleFunc("GET /s/{id}", func(w http.ResponseWriter, r *http.Request) {
-		r.URL.Path = "/"
-		a.assets.ServeHTTP(w, r)
+	mux.HandleFunc("GET /{$}", a.index)
+	mux.HandleFunc("GET /s/{id}", a.index)
+	mux.HandleFunc("GET /robots.txt", a.robots)
+	mux.HandleFunc("GET /sitemap.xml", a.sitemap)
+	mux.HandleFunc("GET /social-preview.png", func(w http.ResponseWriter, r *http.Request) {
+		http.ServeFileFS(w, r, frontend, "docs/images/desktop.png")
 	})
 	mux.Handle("GET /", a.assets)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

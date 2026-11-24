@@ -5,6 +5,7 @@ import (
 	"embed"
 	"errors"
 	"flag"
+	"html/template"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -14,7 +15,7 @@ import (
 	"time"
 )
 
-//go:embed web/*
+//go:embed web/* docs/images/desktop.png
 var frontend embed.FS
 
 var version = "dev"
@@ -38,7 +39,12 @@ func main() {
 		slog.Error("open embedded frontend", "error", err)
 		os.Exit(1)
 	}
-	app := &application{store: store, assets: http.FileServerFS(assets)}
+	homepage, err := template.ParseFS(frontend, "web/index.html")
+	if err != nil {
+		slog.Error("parse homepage", "error", err)
+		os.Exit(1)
+	}
+	app := &application{store: store, assets: http.FileServerFS(assets), homepage: homepage}
 	server := &http.Server{Addr: *addr, Handler: app.routes(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 90 * time.Second}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

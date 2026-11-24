@@ -4,7 +4,70 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#1a202c" />
-    <title>Quickfile</title>
+    <title>Quickfile - 临时文件传输与大文件分享 | WebRTC P2P</title>
+    <meta
+      name="description"
+      content="Quickfile 是可自部署的开源临时文件传输与大文件分享工具，单文件最大 10 GiB，支持 WebTorrent / WebRTC P2P、边传边下、自适应分片上传和 MCP。无需注册，默认 24 小时或 100 次领取后删除。"
+    />
+    {{if .Private}}
+    <meta name="robots" content="noindex, nofollow, noarchive" />
+    {{else}}
+    <meta name="robots" content="index, follow, max-image-preview:large" />
+    <link rel="canonical" href="{{.BaseURL}}/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Quickfile" />
+    <meta property="og:title" content="Quickfile - 临时文件传输与大文件分享" />
+    <meta
+      property="og:description"
+      content="开源、自部署的大文件分享工具。10 GiB per file · WebTorrent / WebRTC P2P · Streaming downloads · MCP for AI agents."
+    />
+    <meta property="og:url" content="{{.BaseURL}}/" />
+    <meta property="og:image" content="{{.BaseURL}}/social-preview.png" />
+    <meta
+      property="og:image:alt"
+      content="Quickfile 文件分享界面 / Quickfile file sharing interface"
+    />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:locale:alternate" content="en_US" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:title"
+      content="Quickfile - Temporary &amp; large file sharing"
+    />
+    <meta
+      name="twitter:description"
+      content="Self-hosted file transfer up to 10 GiB per file, with WebTorrent P2P, streaming downloads, automatic expiry and MCP."
+    />
+    <meta name="twitter:image" content="{{.BaseURL}}/social-preview.png" />
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@graph": [
+          {
+            "@type": "WebSite",
+            "@id": "{{.BaseURL}}/#website",
+            "name": "Quickfile",
+            "url": "{{.BaseURL}}/",
+            "inLanguage": ["zh-CN", "en"],
+            "description": "开源临时文件传输与大文件分享 / Open-source temporary file transfer and large file sharing",
+            "sameAs": "https://github.com/luodaoyi/quickfile"
+          },
+          {
+            "@type": "SoftwareApplication",
+            "name": "Quickfile",
+            "url": "{{.BaseURL}}/",
+            "applicationCategory": "UtilitiesApplication",
+            "operatingSystem": "Web, Linux, Windows, macOS",
+            "softwareVersion": "{{.Version}}",
+            "description": "Self-hosted temporary file sharing with WebTorrent / WebRTC P2P, adaptive chunked uploads, streaming downloads and Model Context Protocol (MCP). Up to 10 GiB per file.",
+            "license": "https://github.com/luodaoyi/quickfile/blob/main/LICENSE",
+            "sameAs": "https://github.com/luodaoyi/quickfile",
+            "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+          }
+        ]
+      }
+    </script>
+    {{end}}
     <link rel="icon" href="/mark.png" />
     <link rel="stylesheet" href="/style.css" />
     <script src="/qrcodegen.js" defer></script>
@@ -28,6 +91,14 @@
         >
           MCP
         </button>
+        <a
+          class="secondary"
+          href="https://github.com/luodaoyi/quickfile"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Quickfile on GitHub"
+          >GitHub</a
+        >
         <button
           id="send-more"
           class="primary"
@@ -90,10 +161,11 @@
         </div>
         <section class="recent" aria-label="最近的空间">
           <div id="empty-history" class="empty-state">
-            <h2 data-i18n="emptyTitle">简单、私密的文件共享</h2>
+            <h2 data-i18n="emptyTitle">临时文件传输与大文件分享</h2>
             <p data-i18n="emptyIntro">
-              拖入文件即可分享链接，对方无需等待上传完成。文件在 24 小时或 100
-              次领取后自动删除。
+              无需注册，单文件最大 10 GiB。支持 P2P 直连与边传边下，默认 24
+              小时或 100 次领取后删除。开源、自部署，并提供 MCP 供 AI Agent
+              分享文件。
             </p>
           </div>
           <div id="history"></div>

@@ -1,3 +1,32 @@
+# Quickfile — 临时文件传输与大文件分享 / Temporary file transfer
+
+> Quickfile is an open-source, self-hosted file sharing tool for temporary and large
+> files up to 10 GiB each. It supports WebTorrent / WebRTC P2P, streaming downloads,
+> adaptive chunked uploads, resumable uploads and Model Context Protocol (MCP).
+> No registration. Default expiry: 24 hours or 100 pickups, whichever comes first.
+
+## Project links
+
+- [Website]({{BASE_URL}}/): 临时文件传输、大文件分享、P2P 直连与边传边下。
+- [Source code](https://github.com/luodaoyi/quickfile): Go single binary, MIT project code, Docker / Podman support.
+- [中文文档](https://github.com/luodaoyi/quickfile/blob/main/README.md): 使用方法、部署、功能和限制。
+- [English documentation](https://github.com/luodaoyi/quickfile/blob/main/README.en.md): Setup, capabilities, API and limitations.
+- [Releases](https://github.com/luodaoyi/quickfile/releases/latest): Binaries for Linux, Windows and macOS, amd64 and arm64.
+- [MCP endpoint]({{BASE_URL}}/mcp): Public Streamable HTTP server for AI agents.
+
+## Capabilities and limits
+
+Temporary file transfer / 临时文件传输; large file sharing / 大文件分享;
+self-hosted Wormhole alternative; multiple files and ZIP64; automatic expiry;
+4 MiB pieces and adaptive upload concurrency from 1 to 5; private WebTorrent
+scheduling with authenticated HTTP web seeds; upload resume across server restart.
+Browser pieces use IndexedDB quota. Native browser download resume is not yet
+implemented. Stored files are plaintext; there is no client-side end-to-end encryption.
+The remote MCP server cannot read files from the agent computer: read locally,
+then send Base64 chunks or use the returned HTTP upload URL.
+
+## MCP guide
+
 Quickfile MCP — public file sharing for agents
 ============================================
 
