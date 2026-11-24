@@ -80,12 +80,11 @@ Visit [http://localhost:8080](http://localhost:8080). For public deployments, co
 
 ### Docker Compose
 
-The image `ghcr.io/luodaoyi/quickfile:latest` supports Linux amd64 and arm64. The following example is for Docker on Linux.
+The image `ghcr.io/luodaoyi/quickfile:latest` supports Linux amd64 and arm64. On a Linux host with Docker Compose installed, download a single `compose.yaml` and start the service. Docker pulls the image automatically.
 
 ```sh
-git clone https://github.com/luodaoyi/quickfile.git
-cd quickfile
-mkdir -p data
+mkdir -p quickfile/data && cd quickfile
+curl -fL https://raw.githubusercontent.com/luodaoyi/quickfile/main/compose.yaml -o compose.yaml
 sudo chown 10001:10001 data
 docker compose up -d
 ```

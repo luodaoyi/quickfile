@@ -80,12 +80,11 @@ Windows 可直接运行下载的 EXE，或在 PowerShell 中指定目录。
 
 ### Docker Compose
 
-镜像为 `ghcr.io/luodaoyi/quickfile:latest`，支持 Linux amd64 和 arm64。以下示例适用于 Linux Docker。
+镜像为 `ghcr.io/luodaoyi/quickfile:latest`，支持 Linux amd64 和 arm64。在已安装 Docker Compose 的 Linux 主机上，下载一份 `compose.yaml` 即可启动，镜像会自动拉取。
 
 ```sh
-git clone https://github.com/luodaoyi/quickfile.git
-cd quickfile
-mkdir -p data
+mkdir -p quickfile/data && cd quickfile
+curl -fL https://raw.githubusercontent.com/luodaoyi/quickfile/main/compose.yaml -o compose.yaml
 sudo chown 10001:10001 data
 docker compose up -d
 ```
