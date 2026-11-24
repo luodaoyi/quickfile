@@ -1,125 +1,325 @@
 import "./three.min.js";
 
-// A textured tube supplies the same moving galaxy perspective as the reference.
-export async function startGalaxy(canvas) {
-  const THREE = globalThis.THREE;
-  const texture = await new THREE.TextureLoader().loadAsync("/galaxy.jpg");
-  const renderer = new THREE.WebGLRenderer({
-    canvas,
-    antialias: true,
-    failIfMajorPerformanceCaveat: true,
-  });
-  const scene = new THREE.Scene();
-  const camera = new THREE.PerspectiveCamera(
-    15,
-    innerWidth / innerHeight,
-    0.01,
-    1000,
-  );
-  camera.rotation.y = Math.PI;
-  camera.position.set(-0.004, -0.005, 0.35);
+const frameDuration = 1000 / 60;
 
-  const points = Array.from(
-    { length: 5 },
-    (_, index) => new THREE.Vector3(0, 0, index * 0.75),
-  );
-  points[4].y = -0.06;
-  const curve = new THREE.CatmullRomCurve3(points);
-  const geometry = new THREE.TubeGeometry(curve, 70, 0.02, 30, false);
-  const positions = geometry.getAttribute("position");
-  points[2].x = points[4].x = 0.025;
-  points[2].y = points[4].y = 0.04;
-  const centers = curve.getPoints(70);
-  for (let index = 0; index < positions.count; index++) {
-    const center = centers[Math.floor(index / 31)];
-    positions.setXY(
-      index,
-      positions.getX(index) + center.x,
-      positions.getY(index) + center.y,
+// Wormhole's galaxy renderer, with asset loading adapted to local modules.
+class Galaxy {
+  constructor(canvas) {
+    this.canvas = canvas;
+    this.isAnimationActive = true;
+    this.forceRender = true;
+    this.destroyed = false;
+    this.framesSinceLastRender = 0;
+    this.lastTime = null;
+    this.isWarping = false;
+    this.warpTimeout = null;
+    this.hyperspace = null;
+    this.shake = null;
+    this.warpParams = {
+      offsetX: 0,
+      offsetY: 0,
+      repeatX: 10,
+      repeatY: 4,
+      cameraShake: 0,
+    };
+    this.render = this.render.bind(this);
+    this.handleMouseMove = (event) => {
+      if (this.isWarping) {
+        this.mouse.target.x = event.clientX;
+        this.mouse.target.y = event.clientY;
+      }
+    };
+    this.handleResize = () => {
+      clearTimeout(this.resizeTimeout);
+      this.resizeTimeout = setTimeout(() => {
+        this.resize();
+        this.forceRender = true;
+      }, 250);
+    };
+    this.reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
+    this.handleReducedMotion = () =>
+      this.setAnimation(!this.reducedMotion.matches);
+    this.handleReducedMotion();
+  }
+
+  async init() {
+    this.THREE = globalThis.THREE;
+    const texture = await new this.THREE.TextureLoader().loadAsync(
+      "/galaxy.jpg",
     );
+    if (this.destroyed) return;
+    this.width = innerWidth;
+    this.height = innerHeight;
+    this.updateRotationSpeed();
+    const x = Math.random(),
+      y = Math.random();
+    this.mouse = {
+      position: new this.THREE.Vector2(this.width * x, this.height * y),
+      positionPercent: new this.THREE.Vector2(x, y),
+      target: new this.THREE.Vector2(this.width * x, this.height * y),
+    };
+    this.renderer = new this.THREE.WebGLRenderer({
+      antialias: true,
+      canvas: this.canvas,
+      failIfMajorPerformanceCaveat: true,
+    });
+    this.pixelRatioQuery = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+    this.renderer.setPixelRatio(Math.min(0.75 * devicePixelRatio, 1));
+    this.renderer.setSize(this.width, this.height);
+    this.camera = new this.THREE.PerspectiveCamera(
+      15,
+      this.width / this.height,
+      0.01,
+      1000,
+    );
+    this.camera.rotation.y = Math.PI;
+    this.camera.position.z = 0.35;
+    this.updateCameraPosition();
+    this.scene = new this.THREE.Scene();
+    this.pixelRatioQuery.addListener(this.handleResize);
+    window.addEventListener("resize", this.handleResize);
+    document.body.addEventListener("mousemove", this.handleMouseMove);
+    this.reducedMotion.addEventListener("change", this.handleReducedMotion);
+    this.createMesh(texture);
+    this.render();
   }
-  positions.needsUpdate = true;
-  texture.wrapS = texture.wrapT = THREE.MirroredRepeatWrapping;
-  texture.repeat.set(10, 4);
-  const material = new THREE.MeshBasicMaterial({
-    side: THREE.BackSide,
-    map: texture,
-  });
-  scene.add(new THREE.Mesh(geometry, material));
 
-  function resize() {
-    renderer.setPixelRatio(Math.min(devicePixelRatio * 0.75, 1));
-    renderer.setSize(innerWidth, innerHeight, false);
-    camera.aspect = innerWidth / innerHeight;
-    camera.updateProjectionMatrix();
-    renderer.render(scene, camera);
+  createMesh(texture) {
+    this.splineGeometry = new this.THREE.BufferGeometry();
+    const points = [];
+    for (let i = 0; i < 5; i++)
+      points.push(new this.THREE.Vector3(0, 0, (i / 4) * 3));
+    points[4].y = -0.06;
+    this.curve = new this.THREE.CatmullRomCurve3(points);
+    this.tubeGeometry = new this.THREE.TubeGeometry(
+      this.curve,
+      70,
+      0.02,
+      30,
+      false,
+    );
+    this.originalTubeGeometry = this.tubeGeometry.clone();
+    this.updateCurve(Infinity);
+    this.tubeMaterial = new this.THREE.MeshBasicMaterial({
+      side: this.THREE.BackSide,
+      map: texture,
+    });
+    texture.wrapS = texture.wrapT = this.THREE.MirroredRepeatWrapping;
+    this.updateMaterialOffset();
+    this.scene.add(new this.THREE.Mesh(this.tubeGeometry, this.tubeMaterial));
   }
-  resize();
-  window.addEventListener("resize", resize);
-  const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-  let previous = null;
-  let framesSinceRender = 0;
-  let warpStarted = null;
-  let warping = false;
-  let warpOffset = 0;
-  const pointer = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
-  document.addEventListener("pointermove", (event) => {
-    pointer.targetX = event.clientX / innerWidth;
-    pointer.targetY = event.clientY / innerHeight;
-  });
-  const ease = (value) => {
-    const p = Math.max(0, Math.min(1, value));
-    return p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
-  };
-  function animate(now) {
-    requestAnimationFrame(animate);
-    if (document.hidden || reducedMotion.matches) {
-      previous = null;
-      framesSinceRender = 0;
-      return;
-    }
-    // Match the reference: every third refresh at rest, every refresh during warp.
-    if (++framesSinceRender < 3 && !warping) return;
-    framesSinceRender = 0;
-    const elapsed = previous === null ? 0 : now - previous;
-    previous = now;
-    const speed = innerWidth > 1500 ? 0.006 : innerWidth > 1000 ? 0.012 : 0.018;
-    texture.offset.y += (elapsed / 1000) * speed;
-    pointer.x += (pointer.targetX - pointer.x) * Math.min(1, elapsed / 800);
-    pointer.y += (pointer.targetY - pointer.y) * Math.min(1, elapsed / 800);
-    let repeat = 10,
-      shake = 0;
-    if (warpStarted !== null) {
-      const seconds = (now - warpStarted) / 1000;
-      repeat = 10 - 9.7 * ease(seconds / 4) + 9.7 * ease((seconds - 9) / 6);
-      texture.offset.x = warpOffset + 8 * ease(seconds / 12);
-      if (seconds >= 4 && seconds < 7)
-        shake =
-          Math.sin(now * 0.053) *
-          0.0025 *
-          Math.min(1, seconds - 4, 7 - seconds);
-      if (seconds >= 15) {
-        warpStarted = null;
-        warping = false;
-      }
-    } else {
-      repeat =
-        texture.repeat.x + (10 - texture.repeat.x) * Math.min(1, elapsed / 500);
-    }
-    texture.repeat.x = repeat;
-    camera.position.x = 0.044 * pointer.x - 0.025 + shake;
-    camera.position.y = 0.044 * pointer.y - 0.025;
-    renderer.render(scene, camera);
+
+  updateRotationSpeed() {
+    this.rotationSpeed =
+      this.width > 2500
+        ? 0.00005
+        : this.width > 2000
+          ? 0.000075
+          : this.width > 1500
+            ? 0.0001
+            : this.width > 1000
+              ? 0.0002
+              : this.width > 500
+                ? 0.0003
+                : 0.0004;
   }
-  requestAnimationFrame(animate);
-  return {
-    setWarp(active) {
-      if (active && !warping && !reducedMotion.matches) {
-        warpStarted = performance.now();
-        warpOffset = texture.offset.x;
+
+  resize() {
+    const oldWidth = this.width,
+      oldHeight = this.height;
+    this.width = innerWidth;
+    this.height = innerHeight;
+    this.updateRotationSpeed();
+    this.camera.aspect = this.width / this.height;
+    this.camera.updateProjectionMatrix();
+    this.pixelRatioQuery.removeListener(this.handleResize);
+    this.pixelRatioQuery = matchMedia(`(resolution: ${devicePixelRatio}dppx)`);
+    this.pixelRatioQuery.addListener(this.handleResize);
+    this.renderer.setPixelRatio(Math.min(0.75 * devicePixelRatio, 1));
+    this.renderer.setSize(this.width, this.height);
+    this.mouse.position.x *= this.width / oldWidth;
+    this.mouse.position.y *= this.height / oldHeight;
+    this.mouse.target.x *= this.width / oldWidth;
+    this.mouse.target.y *= this.height / oldHeight;
+  }
+
+  setAnimation(active) {
+    this.isAnimationActive = active;
+  }
+
+  async warp() {
+    if (this.destroyed || !this.isAnimationActive || this.isWarping) return;
+    this.isWarping = true;
+    const { gsap, RoughEase } = await import("./warp.js");
+    if (!this.isWarping) return;
+    this.warpTimeout = setTimeout(() => this.stopWarp(), 14000);
+    this.hyperspace = gsap.timeline();
+    this.hyperspace.to(this.warpParams, 4, {
+      repeatX: 0.3,
+      ease: "power1.easeInOut",
+    });
+    this.hyperspace.to(
+      this.warpParams,
+      12,
+      { offsetX: 8, ease: "power2.easeInOut" },
+      0,
+    );
+    this.hyperspace.to(
+      this.warpParams,
+      6,
+      { repeatX: 10, ease: "power2.easeInOut" },
+      "-=5",
+    );
+    this.shake = gsap.timeline();
+    this.shake.to(
+      this.warpParams,
+      2,
+      {
+        cameraShake: -0.005,
+        ease: RoughEase.ease.config({
+          template: "power0.easeNone",
+          strength: 0.5,
+          points: 100,
+          taper: "none",
+          randomize: true,
+          clamp: false,
+        }),
+      },
+      4,
+    );
+    this.shake.to(this.warpParams, 1, {
+      cameraShake: 0,
+      ease: RoughEase.ease.config({
+        template: "power0.easeNone",
+        strength: 0.5,
+        points: 100,
+        taper: "none",
+        randomize: true,
+        clamp: false,
+      }),
+    });
+  }
+
+  stopWarp() {
+    if (this.destroyed || !this.isWarping) return;
+    clearTimeout(this.warpTimeout);
+    this.isWarping = false;
+    if (this.hyperspace) {
+      this.hyperspace.kill();
+      this.warpParams.offsetX = 0;
+      this.warpParams.repeatX = 10;
+    }
+    if (this.shake) {
+      this.shake.kill();
+      this.warpParams.cameraShake = 0;
+    }
+  }
+
+  updateMousePosition(elapsed) {
+    this.mouse.position.x +=
+      (this.mouse.target.x - this.mouse.position.x) *
+      Math.min(1, elapsed / frameDuration / 50);
+    this.mouse.position.y +=
+      (this.mouse.target.y - this.mouse.position.y) *
+      Math.min(1, elapsed / frameDuration / 50);
+    this.mouse.positionPercent.x = this.mouse.position.x / this.width;
+    this.mouse.positionPercent.y = this.mouse.position.y / this.height;
+  }
+
+  updateRotation(elapsed) {
+    this.warpParams.offsetY += this.rotationSpeed * (elapsed / frameDuration);
+  }
+
+  updateMaterialOffset() {
+    const map = this.tubeMaterial.map;
+    map.offset.x = this.warpParams.offsetX;
+    map.offset.y = this.warpParams.offsetY;
+    map.repeat.x = this.warpParams.repeatX;
+    map.repeat.y = this.warpParams.repeatY;
+  }
+
+  updateCameraPosition() {
+    this.camera.position.x =
+      0.044 * this.mouse.positionPercent.x -
+      0.025 +
+      this.warpParams.cameraShake;
+    this.camera.position.y = 0.044 * this.mouse.positionPercent.y - 0.025;
+  }
+
+  updateCurve(elapsed) {
+    this.curve.points[2].x = this.curve.points[4].x =
+      0.6 * (1 - this.mouse.positionPercent.x) - 0.3;
+    this.curve.points[2].y = this.curve.points[4].y =
+      0.6 * (1 - this.mouse.positionPercent.y) - 0.3;
+    this.splineGeometry.setFromPoints(this.curve.getPoints(70));
+    const position = new this.THREE.Vector3(),
+      original = new this.THREE.Vector3(),
+      center = new this.THREE.Vector3();
+    const positions = this.tubeGeometry.getAttribute("position");
+    const originals = this.originalTubeGeometry.getAttribute("position");
+    const centers = this.splineGeometry.getAttribute("position");
+    const ringSize = positions.count / centers.count;
+    for (let i = 0; i < positions.count; i++) {
+      position.fromBufferAttribute(positions, i);
+      original.fromBufferAttribute(originals, i);
+      center.fromBufferAttribute(centers, Math.floor(i / ringSize));
+      positions.setX(
+        i,
+        position.x +
+          (original.x + center.x - position.x) *
+            Math.min(1, elapsed / frameDuration / 10),
+      );
+      positions.setY(
+        i,
+        position.y +
+          (original.y + center.y - position.y) *
+            Math.min(1, elapsed / frameDuration / 10),
+      );
+    }
+    positions.needsUpdate = true;
+  }
+
+  render(now) {
+    if (this.destroyed) return;
+    let shouldRender = this.forceRender;
+    if (this.isAnimationActive) {
+      this.framesSinceLastRender++;
+      if (this.framesSinceLastRender >= 3 || this.isWarping)
+        shouldRender = true;
+    }
+    if (shouldRender) {
+      if (now != null && this.lastTime != null) {
+        const elapsed = now - this.lastTime;
+        if (this.isWarping) this.updateMousePosition(elapsed);
+        this.updateRotation(elapsed);
+        this.updateMaterialOffset();
+        if (this.isWarping) {
+          this.updateCameraPosition();
+          this.updateCurve(elapsed);
+        }
+        this.forceRender = false;
       }
-      if (!active) warpStarted = null;
-      warping = active;
-    },
-  };
+      this.renderer.render(this.scene, this.camera);
+      this.lastTime = now;
+      this.framesSinceLastRender = 0;
+    }
+    requestAnimationFrame(this.render);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    clearTimeout(this.warpTimeout);
+    clearTimeout(this.resizeTimeout);
+    this.pixelRatioQuery?.removeListener(this.handleResize);
+    window.removeEventListener("resize", this.handleResize);
+    document.body.removeEventListener("mousemove", this.handleMouseMove);
+    this.reducedMotion.removeEventListener("change", this.handleReducedMotion);
+  }
+}
+
+export async function startGalaxy(canvas) {
+  const background = new Galaxy(canvas);
+  await background.init();
+  return background;
 }

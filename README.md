@@ -205,4 +205,4 @@ url = "https://file.011f.com/mcp"
 
 本项目代码和自行编写的文档采用 [MIT 协议](LICENSE)。
 
-界面参考 [Wormhole](https://wormhole.app/)。银河纹理与标记来自其公开页面，这些素材的权利归原作者，项目的 MIT 授权不覆盖这些第三方素材。背景使用 Three.js r135 绘制，保留其 [MIT 许可证](web/THREE-LICENSE.txt)。二维码使用 [Project Nayuki 的 QR Code generator](https://www.nayuki.io/page/qr-code-generator-library)，保留代码中的 MIT 许可证。
+界面参考 [Wormhole](https://wormhole.app/)。银河纹理与标记来自其公开页面，这些素材的权利归原作者，项目的 MIT 授权不覆盖这些第三方素材。背景使用 Three.js r135 绘制，保留其 [MIT 许可证](web/THREE-LICENSE.txt)。银河渲染逻辑按 Wormhole 的公开前端实现移植，使用同版 GSAP 3.10.4 与 RoughEase，保留脚本中的 GreenSock 版权及许可声明；这部分第三方代码不包含在本项目的 MIT 授权中。二维码使用 [Project Nayuki 的 QR Code generator](https://www.nayuki.io/page/qr-code-generator-library)，保留代码中的 MIT 许可证。

@@ -596,7 +596,7 @@ async function chooseFiles(files) {
       return;
     }
     $("choose-files").disabled = true;
-    galaxy?.setWarp(true);
+    galaxy?.warp().catch((err) => message(err.message, true));
     const data = await api("/api/spaces", {
       method: "POST",
       body: {
@@ -614,7 +614,7 @@ async function chooseFiles(files) {
     showShare(record);
     await uploadSpace(record, files);
   } catch (err) {
-    if (![...senders.values()].some((s) => s.running)) galaxy?.setWarp(false);
+    if (![...senders.values()].some((s) => s.running)) galaxy?.stopWarp();
     message(`${t("failed")}: ${err.message}`, true);
   } finally {
     $("choose-files").disabled = false;
@@ -649,7 +649,6 @@ async function uploadSpace(record, files) {
   if (sender.running) return;
   sender.files = files;
   sender.running = true;
-  galaxy?.setWarp(true);
   renderHistory();
   try {
     const fresh = await api(`/api/spaces/${record.id}`);
@@ -716,7 +715,7 @@ async function uploadSpace(record, files) {
   } catch (err) {
     if (err.status === 410) record.expired = true;
     if (![...senders.values()].some((s) => s !== sender && s.running))
-      galaxy?.setWarp(false);
+      galaxy?.stopWarp();
     message(`${t("failed")}: ${err.message}`, true);
   } finally {
     sender.running = false;
@@ -969,7 +968,8 @@ translate();
 startGalaxy($("galaxy"))
   .then((background) => {
     galaxy = background;
-    galaxy.setWarp([...senders.values()].some((s) => s.running));
+    if ([...senders.values()].some((s) => s.running))
+      galaxy.warp().catch((err) => message(err.message, true));
   })
   .catch((err) => {
     console.error("Galaxy background:", err);
