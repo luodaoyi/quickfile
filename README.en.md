@@ -45,7 +45,9 @@ No installation or account is required. Open the website, choose your files, and
 2. Copy and share the link while your files continue uploading.
 3. Recipients can open the link and start downloading before the entire upload finishes.
 
-Keep the sender's page open until it reports that uploading is complete. After that, recipients can still download until the share expires. To resume an interrupted upload, select the original files from the recent space entry.
+The file picker offers files and folders. After selection, the share panel immediately shows the link, QR code, and live upload progress. Browsers with system sharing support also offer a Share button. The galaxy briefly accelerates when files are selected.
+
+Keep the sender's page open until the share panel reports that uploading is complete. After that, recipients can still download until the share expires. To resume an interrupted upload, select the original files from the recent space entry.
 
 ## Self-hosting
 
@@ -186,4 +188,4 @@ Upload and pickup credentials normally use `Authorization: Bearer <token>`. Nati
 
 Project code and original documentation are available under the [MIT License](LICENSE).
 
-The interface is inspired by [Wormhole](https://wormhole.app/). The galaxy texture and mark come from its public website and remain the property of their respective owners; the project's MIT grant does not cover these third-party assets. The background uses Three.js r135, with its [MIT license](web/THREE-LICENSE.txt) retained.
+The interface is inspired by [Wormhole](https://wormhole.app/). The galaxy texture and mark come from its public website and remain the property of their respective owners; the project's MIT grant does not cover these third-party assets. The background uses Three.js r135, with its [MIT license](web/THREE-LICENSE.txt) retained. QR codes use [Project Nayuki's QR Code generator](https://www.nayuki.io/page/qr-code-generator-library), with the MIT license retained in its source.

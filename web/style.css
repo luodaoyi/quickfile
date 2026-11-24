@@ -447,6 +447,169 @@ select {
 iframe.download-frame {
   display: none;
 }
+.page-header {
+  justify-content: space-between;
+  gap: 16px;
+}
+.upload-center {
+  position: relative;
+}
+.file-menu {
+  position: absolute;
+  top: calc(100% - 24px);
+  left: 0;
+  z-index: 2;
+  min-width: 224px;
+  padding: 8px 0;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-radius: 6px;
+  background: #2d3748;
+  box-shadow: 0 10px 15px rgba(0, 0, 0, 0.15);
+}
+.file-menu button {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 12px;
+  text-align: left;
+  font-size: 18px;
+}
+.file-menu button:hover,
+.file-menu button:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+}
+.file-menu svg {
+  width: 24px;
+  height: 24px;
+}
+.share-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: min(736px, 100%);
+  margin: 0 auto;
+  gap: 0;
+  text-align: center;
+  animation: share-enter 0.3s ease-out;
+}
+.share-panel h2 {
+  margin: 0 0 48px;
+  font-size: clamp(32px, 4vw, 48px);
+  line-height: 1.2;
+  background: linear-gradient(90deg, #ed2681, #8a1dbb);
+  color: transparent;
+  background-clip: text;
+}
+.share-panel h2:focus {
+  outline: none;
+}
+.share-link-area {
+  width: 100%;
+}
+.share-panel h3 {
+  margin: 0 0 16px;
+  font-size: 24px;
+  line-height: 1.3;
+}
+.share-link-row {
+  display: flex;
+  gap: 8px;
+}
+.share-link-row input {
+  width: 100%;
+  min-width: 0;
+  height: 48px;
+  padding: 0 16px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  border-radius: 6px;
+  color: white;
+  background: transparent;
+  font-size: 18px;
+}
+.share-tools {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}
+.share-tools button {
+  flex: 1;
+  height: 48px;
+  font-size: 18px;
+}
+.share-panel svg {
+  width: 24px;
+  height: 24px;
+}
+#share-expiry {
+  margin: 48px 0;
+  font-size: 16px;
+  line-height: 1.6;
+}
+.upload-state {
+  width: min(384px, 100%);
+}
+#upload-status {
+  margin: 0 0 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+#upload-progress {
+  height: 8px;
+  margin: 0;
+}
+#upload-help {
+  margin: 12px 0 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+#resume-upload {
+  margin-top: 16px;
+}
+#qr-code canvas {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto;
+}
+@keyframes share-enter {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-panel {
+    animation: none;
+  }
+}
+@media (max-width: 479px) {
+  .share-link-row {
+    flex-direction: column;
+  }
+  .share-panel h2 {
+    margin-bottom: 32px;
+  }
+  .share-panel h3 {
+    font-size: 20px;
+  }
+  #share-expiry {
+    margin: 32px 0;
+  }
+  #send-more {
+    font-size: 14px;
+    padding: 0 12px;
+  }
+  .page-header {
+    padding-inline: 16px;
+  }
+}
 [hidden] {
   display: none !important;
 }

@@ -7,6 +7,7 @@
     <title>Quickfile</title>
     <link rel="icon" href="/mark.png" />
     <link rel="stylesheet" href="/style.css" />
+    <script src="/qrcodegen.js" defer></script>
     <script src="/app.js" type="module"></script>
   </head>
   <body>
@@ -18,6 +19,15 @@
         ><img src="/mark.png" width="40" height="40" alt="" />
         <h1>Quickfile</h1></a
       >
+      <button
+        id="send-more"
+        class="primary"
+        type="button"
+        data-i18n="sendMore"
+        hidden
+      >
+        发送更多文件
+      </button>
     </header>
     <main>
       <section id="send-view" class="panel send-panel">
@@ -29,9 +39,19 @@
                 type="button"
                 class="primary large"
                 data-i18n="pickFiles"
+                aria-expanded="false"
+                aria-controls="file-menu"
               >
                 选择要发送的文件
               </button>
+              <div id="file-menu" class="file-menu" hidden>
+                <button id="pick-files" type="button">
+                  <span data-i18n="selectFiles">选择文件</span>
+                </button>
+                <button id="pick-folder" type="button">
+                  <span data-i18n="selectFolder">选择文件夹</span>
+                </button>
+              </div>
               <p data-i18n="dropHelp">或者将文件拖到这里</p>
             </div>
             <p class="upload-limit" data-i18n="uploadLimit">
@@ -56,6 +76,7 @@
             </button>
           </div>
           <input id="files" type="file" multiple hidden />
+          <input id="folder" type="file" webkitdirectory multiple hidden />
         </div>
         <section class="recent" aria-label="最近的空间">
           <div id="empty-history" class="empty-state">
@@ -67,6 +88,48 @@
           </div>
           <div id="history"></div>
         </section>
+      </section>
+      <section
+        id="share-view"
+        class="panel share-panel"
+        aria-labelledby="share-title"
+        hidden
+      >
+        <h2 id="share-title" tabindex="-1" data-i18n="filesReady">
+          文件已准备就绪！
+        </h2>
+        <div class="share-link-area">
+          <h3 data-i18n="copyToShare">复制链接以分享文件</h3>
+          <div class="share-link-row">
+            <input id="share-link" type="text" readonly aria-label="分享链接" />
+            <button id="copy-link" type="button" class="primary large">
+              <span data-i18n="copy">复制链接</span>
+            </button>
+          </div>
+          <div class="share-tools">
+            <button id="native-share" class="secondary" type="button" hidden>
+              <span data-i18n="share">分享</span>
+            </button>
+            <button id="show-qr" class="secondary" type="button">
+              <span data-i18n="showQR">展示二维码</span>
+            </button>
+          </div>
+        </div>
+        <p id="share-expiry"></p>
+        <div class="upload-state" aria-live="polite">
+          <p id="upload-status"></p>
+          <progress id="upload-progress" max="1" value="0"></progress>
+          <p id="upload-help"></p>
+          <button
+            id="resume-upload"
+            type="button"
+            class="secondary"
+            data-i18n="resume"
+            hidden
+          >
+            继续上传
+          </button>
+        </div>
       </section>
       <section id="receive-view" class="panel receive-panel" hidden>
         <div class="receive-list">
@@ -113,6 +176,13 @@
         ><span>简体中文</span>
       </button>
     </footer>
+    <dialog id="qr-dialog" class="settings-dialog">
+      <h2 data-i18n="scanToDownload">扫码下载</h2>
+      <div id="qr-code"></div>
+      <form method="dialog" class="dialog-actions">
+        <button class="primary" type="submit" data-i18n="done">完成</button>
+      </form>
+    </dialog>
     <dialog id="share-settings" class="settings-dialog">
       <form method="dialog">
         <h2 data-i18n="settings">分享设置</h2>

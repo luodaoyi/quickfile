@@ -58,6 +58,18 @@ export async function startGalaxy(canvas) {
   window.addEventListener("resize", resize);
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   let previous = 0;
+  let warpStarted = null;
+  let warping = false;
+  let warpOffset = 0;
+  const pointer = { x: 0.5, y: 0.5, targetX: 0.5, targetY: 0.5 };
+  document.addEventListener("pointermove", (event) => {
+    pointer.targetX = event.clientX / innerWidth;
+    pointer.targetY = event.clientY / innerHeight;
+  });
+  const ease = (value) => {
+    const p = Math.max(0, Math.min(1, value));
+    return p < 0.5 ? 2 * p * p : 1 - (-2 * p + 2) ** 2 / 2;
+  };
   function animate(now) {
     requestAnimationFrame(animate);
     if (document.hidden || reducedMotion.matches || now - previous < 50) return;
@@ -65,7 +77,41 @@ export async function startGalaxy(canvas) {
     previous = now;
     const speed = innerWidth > 1500 ? 0.006 : innerWidth > 1000 ? 0.012 : 0.018;
     texture.offset.y += (elapsed / 1000) * speed;
+    pointer.x += (pointer.targetX - pointer.x) * Math.min(1, elapsed / 800);
+    pointer.y += (pointer.targetY - pointer.y) * Math.min(1, elapsed / 800);
+    let repeat = 10,
+      shake = 0;
+    if (warpStarted !== null) {
+      const seconds = (now - warpStarted) / 1000;
+      repeat = 10 - 9.7 * ease(seconds / 4) + 9.7 * ease((seconds - 9) / 6);
+      texture.offset.x = warpOffset + 8 * ease(seconds / 12);
+      if (seconds >= 4 && seconds < 7)
+        shake =
+          Math.sin(now * 0.053) *
+          0.0025 *
+          Math.min(1, seconds - 4, 7 - seconds);
+      if (seconds >= 15) {
+        warpStarted = null;
+        warping = false;
+      }
+    } else {
+      repeat =
+        texture.repeat.x + (10 - texture.repeat.x) * Math.min(1, elapsed / 500);
+    }
+    texture.repeat.x = repeat;
+    camera.position.x = 0.044 * pointer.x - 0.025 + shake;
+    camera.position.y = 0.044 * pointer.y - 0.025;
     renderer.render(scene, camera);
   }
   requestAnimationFrame(animate);
+  return {
+    setWarp(active) {
+      if (active && !warping && !reducedMotion.matches) {
+        warpStarted = performance.now();
+        warpOffset = texture.offset.x;
+      }
+      if (!active) warpStarted = null;
+      warping = active;
+    },
+  };
 }
